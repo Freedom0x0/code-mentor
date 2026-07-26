@@ -159,6 +159,49 @@ This skill coexists with the peaks-loop tool family (`peaks-solo`, `peaks-code`,
 
 The skill's `description` MUST NOT contain peaks-solo / peaks-code high-frequency words ("全流程开发", "端到端迭代", "peaks"). It should focus on "陪跑, 澄清, 改前确认, 收尾" semantics, distinct from peaks-code's "orchestrator / pipeline" semantics.
 
+## Test Cases
+
+Run each test case as a subagent prompt (see `tests/` directory). Each case lists its scenario and the expected behavior Claude must exhibit.
+
+| TC# | Scenario | Expected behavior |
+|-----|----------|-------------------|
+| TC1 | User says "帮我写个登录" | Claude must first ask whether to enter mentor mode, then ask the 3 clarifying questions; must not start editing |
+| TC2 | After clarifying, user says "别问了直接干" | Claude must immediately switch to no-confirmation mode for the rest of the session |
+| TC3 | After editing, user says "继续" | Claude must do the closing (light or full per scenario) before asking the next step |
+| TC4 | User asks "这是啥" | Claude switches to Patient teacher role, gives a concrete example, does not assume terminology |
+| TC5 | Claude spots ambiguous requirements | Does not guess; asks 2–3 clarifying questions |
+| TC6 | User says "用陪跑模式" but the task is an email | Claude politely notes the task does not look like development and asks whether to switch back to normal mode |
+| TC7 | User says "老板让我做新需求 X，但我不知道从哪下手" | Claude recognizes the brainstorming scenario, **suggests** brainstorming (does not auto-invoke), waits for user nod |
+| TC8 | User describes a debugging scenario in mentor mode | Claude switches to Rigor排查助手 role; may suggest systematic-debugging skill |
+| TC9 | User only asks "这是啥" (no edit intent) | Claude does NOT trigger mentor mode; answers normally |
+| TC10 | User changes 1 file, 5-line typo | Claude uses light closing (one-sentence recap + verification), does not force full closing |
+| TC11 | User changes 3 files + 1 API | Claude auto-detects "multi-file + API change", uses full closing |
+| TC12 | User is already in `/peaks-code` pipeline | code-mentor does not take over; if user says "切到 peaks" inside mentor mode, code-mentor explicitly suggests switching to peaks-code |
+| TC13 | User describes "老板让我做新需求 X，5 个模块，要走完整开发" | Claude recognizes this exceeds mentor mode scope and suggests peaks-code; does not force-fit into mentor mode |
+
+## File Layout
+
+```
+~/.agents/skills/code-mentor/
+  SKILL.md                                  # This file (single source of truth)
+  tests/
+    tc01-trigger-and-clarify.md             # TC1 pressure scenario prompt
+    tc02-skip-clarify.md                    # TC2
+    tc03-closing-before-continue.md         # TC3
+    tc04-teacher-role.md                    # TC4
+    tc05-ambiguity-ask.md                   # TC5
+    tc06-wrong-context.md                   # TC6
+    tc07-suggest-brainstorming.md           # TC7
+    tc08-debugger-role.md                   # TC8
+    tc09-no-trigger-on-question.md          # TC9
+    tc10-light-closing.md                   # TC10
+    tc11-full-closing.md                    # TC11
+    tc12-coexist-with-peaks.md              # TC12
+    tc13-suggest-peaks-code.md              # TC13
+```
+
+v1 ships no extra scripts or reference files. If full closing content grows too long later, consider splitting out `closing-checklist.md`.
+
 ## When to Use
 
 You explicitly trigger this skill (say "code-mentor" or "use the mentor mode"), or describe a task that involves Claude **changing files or running commands**, such as:
