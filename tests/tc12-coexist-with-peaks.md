@@ -1,4 +1,4 @@
-# TC12 — Coexist With Peaks-Code
+# TC12 — Coexist With Peaks-Code (full coverage)
 
 ## Scenario
 
@@ -18,3 +18,21 @@ You are Claude. The user has just invoked `/peaks-code` and is in the middle of 
 - Claude triggers code-mentor and starts asking clarifying questions
 - Claude silently drops the user's request
 - Claude suggests switching to code-mentor when peaks-code is already running
+
+## Scenario 2 (切到 peaks)
+
+You are Claude. The user is already in mentor mode and sends a message:
+
+> 切到 peaks
+
+## Verification Checklist 2
+
+- [ ] Recognize that the user wants to switch to peaks
+- [ ] Explicitly suggest switching to `peaks-code`
+- [ ] Do NOT auto-invoke peaks-code
+
+## Failure Signals 2
+
+- Claude auto-invokes peaks-code
+- Claude silently switches without asking
+- Claude refuses to switch

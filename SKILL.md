@@ -168,7 +168,7 @@ Run each test case as a subagent prompt (see `tests/` directory). Each case list
 | TC1 | User says "帮我写个登录" | Claude must first ask whether to enter mentor mode, then ask the 3 clarifying questions; must not start editing |
 | TC2 | After clarifying, user says "别问了直接干" | Claude must immediately switch to no-confirmation mode for the rest of the session |
 | TC3 | After editing, user says "继续" | Claude must do the closing (light or full per scenario) before asking the next step |
-| TC4 | User asks "这是啥" | Claude switches to Patient teacher role, gives a concrete example, does not assume terminology |
+| TC4 | User asks "这是啥" (already in mentor mode) | Claude switches to Patient teacher role, gives a concrete example, does not assume terminology |
 | TC5 | Claude spots ambiguous requirements | Does not guess; asks 2–3 clarifying questions |
 | TC6 | User says "用陪跑模式" but the task is an email | Claude politely notes the task does not look like development and asks whether to switch back to normal mode |
 | TC7 | User says "老板让我做新需求 X，但我不知道从哪下手" | Claude recognizes the brainstorming scenario, **suggests** brainstorming (does not auto-invoke), waits for user nod |
