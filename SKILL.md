@@ -103,6 +103,62 @@ These are the most common rationalizations Claude uses to skip the workflow. **E
 | "User is a newbie, give them the concise version" | WRONG. Newbies need closing more, not less; only the intensity is adjustable |
 | "I can tell this change is safe" | WRONG. Safety is decided by the user, not by Claude |
 
+## Skill Collaboration
+
+This skill **does not auto-invoke** other skills. Reasons: skills like `superpowers:brainstorming` have a `<HARD-GATE>` requiring user approval before implementation. Auto-invoking would bypass that safety mechanism.
+
+### Collaboration Flow
+
+```
+User describes a dev task → code-mentor enters mentor mode
+   ↓
+code-mentor identifies a scenario that suits skill X
+   ↓
+code-mentor says: "这种情况我建议走 X skill（理由是 Y），要我启动吗？"
+   ↓
+User nods → code-mentor explicitly invokes X skill
+   ↓
+X skill runs independently → control returns to code-mentor for confirm + close
+```
+
+### Recognized Suggestion Scenarios (v1)
+
+| User description | Suggested skill | Why |
+|------------------|-----------------|-----|
+| "老板让我做新需求" / "从哪下手" / "这个需求要做哪些功能" | brainstorming | Requirements unclear; clarify before building |
+| "反复报这个错" / "调试了好几轮还是不对" | systematic-debugging | Needs root-cause investigation flow |
+| "帮我写代码" / "按这个方案实现" | test-driven-development | New code should have tests first |
+| "提交前 review 一下" / "这个 PR 怎么改" | code-review | Independent review before submit |
+
+### Hard Limit
+
+code-mentor MUST NOT invoke any skill without the user's explicit nod. This is the same principle as "confirm before file changes".
+
+## Peaks-Loop Compatibility
+
+This skill coexists with the peaks-loop tool family (`peaks-solo`, `peaks-code`, `peaks-rd`, `peaks-prd`, `peaks-qa`, etc.) without conflict.
+
+### Mechanism (based on real frontmatter evidence)
+
+- Claude's skill system loads every skill's `description` into the system prompt at every new conversation.
+- Hit detection = LLM matches user message keywords against descriptions; there is **no priority or suppression mechanism**.
+- `peaks-solo` and `peaks-code` are public entry points; `peaks-rd` / `peaks-prd` / `peaks-qa` are `visibility: internal` sub-agent roles used inside `peaks-code` and are not exposed to the user.
+- peaks-* never overrides custom skills via SYSTEM message; code-mentor does not suppress peaks-* either.
+
+### Actual Trigger Paths
+
+| User says | Hits | Path |
+|-----------|------|------|
+| "code-mentor" / "用陪跑模式" | code-mentor | User's explicit intent, code-mentor takes over |
+| "/peaks-code" / "全流程做这个 PRD" | peaks-code | User's explicit choice, full pipeline |
+| "老板让我做新需求 X" | code-mentor or peaks-solo | Whichever description matches better |
+| "帮我写个登录 API" (small change) | code-mentor | Outside peaks-code's "full pipeline" semantics |
+| Overlap (multiple matches) | One or the other | LLM picks by description match; user can override by naming the skill |
+
+### Description Writing Constraint
+
+The skill's `description` MUST NOT contain peaks-solo / peaks-code high-frequency words ("全流程开发", "端到端迭代", "peaks"). It should focus on "陪跑, 澄清, 改前确认, 收尾" semantics, distinct from peaks-code's "orchestrator / pipeline" semantics.
+
 ## When to Use
 
 You explicitly trigger this skill (say "code-mentor" or "use the mentor mode"), or describe a task that involves Claude **changing files or running commands**, such as:
