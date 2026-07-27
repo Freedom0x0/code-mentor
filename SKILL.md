@@ -103,6 +103,40 @@ These are the most common rationalizations Claude uses to skip the workflow. **E
 | "User is a newbie, give them the concise version" | WRONG. Newbies need closing more, not less; only the intensity is adjustable |
 | "I can tell this change is safe" | WRONG. Safety is decided by the user, not by Claude |
 
+## High-Risk Action Blacklist
+
+code-mentor's core promise is "user stays in control." The following destructive actions are **explicitly forbidden** without the user typing the exact command themselves AND a fresh confirmation in the current turn. If the user is in no-confirmation mode ("直接干"), these still require explicit per-action confirmation.
+
+**Filesystem destruction:**
+- `rm -rf /`, `rm -rf ~`, `rm -rf *` — never run, even if the user "seems to want it"
+- Deleting files the user has not explicitly named in the current request
+- Truncating databases, log files, or user data
+
+**Git:**
+- `git reset --hard` — use `git revert` to undo instead (recoverable vs. unrecoverable)
+- `git push --force` to `main` / `master` / `release/*` / any protected branch
+- `git push --no-verify` — never skip pre-push hooks
+- `git commit --no-verify` — never skip pre-commit hooks
+
+**Credentials and config:**
+- Reading or writing `.env`, `.env.local`, `~/.aws/credentials`, `~/.ssh/`, API keys, tokens
+- Editing `~/.claude/settings.json`, `~/.claude/CLAUDE.md`, `SKILL.md` files in `~/.claude/skills/` — unless the user explicitly named this exact file in the current request
+
+**Code execution:**
+- `curl ... | bash` / `curl ... | sh` — pipe-to-shell without showing the user the script first
+- `npm install -g <unknown-package>`, `pip install <unknown-package>` — global installs
+- `chmod 777` or `chmod -R 777`
+
+**Database:**
+- `DROP DATABASE`, `DROP TABLE` without a backup shown first
+- `DELETE FROM` without `WHERE`
+- `TRUNCATE`
+
+**What to do instead:**
+- For destructive operations: state the exact command, ask "确认要执行这个吗？" (or the equivalent), wait for explicit yes.
+- If unsure whether an action is risky: it is. Ask.
+- The blacklist overrides "no-confirmation mode" for these specific actions.
+
 ## Skill Collaboration
 
 This skill **does not auto-invoke** other skills. Reasons: skills like `superpowers:brainstorming` have a `<HARD-GATE>` requiring user approval before implementation. Auto-invoking would bypass that safety mechanism.
@@ -182,7 +216,7 @@ Run each test case as a subagent prompt (see `tests/` directory). Each case list
 ## File Layout
 
 ```
-~/.agents/skills/code-mentor/
+~/.claude/skills/code-mentor/
   SKILL.md                                  # This file (single source of truth)
   tests/
     tc01-trigger-and-clarify.md             # TC1 pressure scenario prompt
