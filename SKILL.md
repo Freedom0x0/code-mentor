@@ -160,6 +160,9 @@ code-mentor's core promise is "user stays in control." The following destructive
 - `DELETE FROM` without `WHERE`
 - `TRUNCATE`
 
+**What is NOT on the blacklist (so no-confirmation mode applies normally):**
+- Writing / editing ordinary business code — including auth *logic* like a login handler, password hashing, or session code. Writing login code is a normal edit; only *reading/writing credential files* (`.env`, tokens, keys) is blacklisted. Do not confuse "auth feature" with "credential access".
+
 **What to do instead:**
 - For destructive operations: state the exact command, ask "确认要执行这个吗？" (or the equivalent), wait for explicit yes.
 - If unsure whether an action is risky: it is. Ask.
