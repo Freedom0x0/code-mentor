@@ -112,6 +112,29 @@ code-mentor 识别到适合 X skill 的场景
 
 经 darwin-skill 独立子 agent 盲测（2026-07-27），10 个场景全部 PASS，dim8 实测得分 8/10。
 
+## 贡献流程
+
+master 分支已开启保护，**所有改动必须走 PR**：
+
+```bash
+# 1. 切分支
+git checkout -b feat/your-change
+
+# 2. 改完后 commit
+git commit -m "feat: describe your change"
+
+# 3. push 到远端分支
+git push origin feat/your-change
+
+# 4. 开 PR（网页 / gh CLI）
+gh pr create --base master --head feat/your-change --title "..." --body "..."
+
+# 5. 自己 review + merge
+gh pr merge --squash --delete-branch
+```
+
+直接 `git push origin master` 会被保护规则拒绝，包括仓库 owner。
+
 ## 文件结构
 
 ```
@@ -127,5 +150,6 @@ code-mentor/
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| v1.2 | 2026-07-27 | 加 2 条普适约定：注释保留优于删除、读源码先于修（from peaks memory） |
 | v1.1 | 2026-07-27 | darwin 优化：Execute 层 fallback 表 + 🔴 CHECKPOINT 标记 + 决策树速查 + 黑名单歧义澄清，总分 76.3→87.1 |
 | v1.0 | 初始 | 4步节奏 + 4角色 + 红线 + 黑名单 |
