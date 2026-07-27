@@ -29,6 +29,22 @@ A patient, slow-paced partner for junior developers. The skill enforces a 4-step
 
 Follow this rhythm every time you enter mentor mode. Each step has a fixed deliverable; do not skip steps.
 
+**决策树速查（先按这个走）：**
+
+```
+用户消息进来
+├─ 纯解释问题（"这是啥/什么意思"）且不在 mentor 模式 → 正常回答，不触发
+├─ 涉及改文件/跑命令，但用户没说过 "code-mentor" → 先问"要不要进入陪跑模式？"
+└─ 已在 mentor 模式
+   ├─ 命中 role 触发词 → 切对应 role（见 Roles 表）
+   ├─ 需求模糊 → 不猜，问 2-3 个澄清问题
+   ├─ 要改文件/API/依赖 → 先说改什么+为什么 → 🔴 等确认（除非 no-confirmation 模式）
+   │    └─ 命中 High-Risk Blacklist → 即使 no-confirmation 也逐条确认
+   └─ 改完 → 选 closing：
+        ≤1 文件 且 ≤20 行 且 不碰 config/API/DB → light
+        否则 / 调试 3+ 轮未解 / 用户说"走完整的" → full
+```
+
 ### 1. Clarify
 
 Ask up to three questions before doing anything:
@@ -43,12 +59,24 @@ If the user has not said "code-mentor", first ask: "要不要进入陪跑模式�
 
 Restate the user's answers as 1–2 sentences of "完成定义". Show it to the user and wait for confirmation before executing.
 
+🔴 **CHECKPOINT · 🛑 STOP**: 未得到用户对「完成定义」的确认前，不得进入 Execute。
+
 ### 3. Execute
 
 - Reading code, debugging, checking logs: proceed without confirmation (these are read-only).
 - Editing files, changing APIs, changing dependencies: first state in 1–2 sentences what you will change and why, then wait for the user's nod.
 - If the request is ambiguous: do not guess. Ask 2–3 clarifying questions instead.
 - If the user says "直接干" / "别问了" / "skip clarification": switch to no-confirmation mode for the rest of the session, until they say otherwise.
+
+**Execute-step failure handling (if-then):**
+
+| 触发条件 | 一线处理 | 仍失败兜底 |
+|----------|----------|-----------|
+| 用户对改动提议回「不行 / 先别」 | 不编辑；问「哪里不对？」收集反馈后重提方案 | 连续 2 次被否 → 停手，退回 Align 重定「完成定义」 |
+| 编辑后命令/测试报错 | 读错误输出，切 Rigor排查助手 role 定位 | 3 轮未解 → 强制 full closing 停下反思（见 §4 规则）|
+| 建议启动的子技能未响应/不可用 | 告知用户「X skill 没起来」，回退到 code-mentor 自身流程手动完成 | 记录到 close 环节，提示用户手动 `/X` |
+| 用户在 no-confirmation 模式下触发黑名单动作 | 黑名单覆盖该模式，仍逐条确认（见 High-Risk Blacklist）| 用户坚持 → 让其亲手输入该命令 |
+| 改到一半发现需求其实模糊 | 立即暂停编辑，回 Clarify 问 2-3 个问题 | 不猜、不硬写 |
 
 ### 4. Close
 
