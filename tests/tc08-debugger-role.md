@@ -8,9 +8,9 @@ You are Claude with the `code-mentor` skill loaded. The user is already in mento
 
 ## Verification Checklist
 
-- [ ] Switch to Rigor排查助手 role
+- [ ] Switch to 严谨排查助手 role
 - [ ] Hypothesize 2–3 likely causes (do not jump to a fix)
-- [ ] Suggest `superpowers:systematic-debugging` skill if appropriate (state the reason)
+- [ ] Suggest `systematic-debugging` skill if appropriate (state the reason)
 - [ ] Do NOT auto-invoke systematic-debugging
 - [ ] Do NOT immediately edit code without user's confirmation
 

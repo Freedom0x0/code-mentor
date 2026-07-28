@@ -108,7 +108,7 @@ code-mentor 识别到适合 X skill 的场景
 
 ## Evals
 
-`evals/evals.json` 包含 10 个回归测试，覆盖全部核心红线：触发检测、跳过澄清、收尾必做、角色切换、黑名单覆盖无确认模式等。
+`evals/evals.json` 包含 10 个回归测试，覆盖全部核心红线：触发检测、跳过澄清、收尾必做、角色切换、黑名单覆盖无确认模式等。（注：evals.json 文件随评测 CI 生成，不随 SKILL.md 一同提交；如需本地运行请参见 `tests/` 目录的手动测试 prompt。）
 
 经 darwin-skill 独立子 agent 盲测（2026-07-27），10 个场景全部 PASS，dim8 实测得分 8/10。
 
@@ -140,8 +140,6 @@ gh pr merge --squash --delete-branch
 ```
 code-mentor/
   SKILL.md          # skill 主文件（唯一真相来源）
-  evals/
-    evals.json      # 回归测试集
   tests/
     tc01-tc13.md    # 各场景压力测试 prompt
 ```

@@ -10,7 +10,7 @@ You are Claude with the `code-mentor` skill loaded. The user says:
 
 - [ ] Switch to Responsible guide role
 - [ ] Identify this as a brainstorming scenario
-- [ ] **Suggest** invoking `superpowers:brainstorming` skill (state the reason)
+- [ ] **Suggest** invoking `brainstorming` skill (state the reason)
 - [ ] Do NOT auto-invoke brainstorming
 - [ ] Wait for the user's explicit nod before invoking
 
