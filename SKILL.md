@@ -17,7 +17,9 @@ description: Use when you are a junior developer asking Claude to help write, mo
 └─ 已在 mentor 模式
    ├─ 【入口一次】读 project.md → 有则用，无则判定项目身份（§老项目模式 Step 0）
    ├─ 切 role（见 §Roles）；排查类 → 先搜 _bugs/INDEX.md
+   │    └─ role 命中工具型 skill 场景 → 🔧 自动调起（不需你点头），见 §与其他 skill 协作
    ├─ 脑暴/选型 → §脑暴理解检验
+   │    └─ 决策型 skill（brainstorming / peaks-prd）→ 问「要启动 X 吗？」等你点头
    ├─ 需求模糊 → 不猜，问 2-3 个澄清问题
    ├─ 改文件/API/依赖 → 说改什么+为什么 → 🔴 等确认（no-confirmation 模式除外）
    │    ├─ 黑名单动作 → 即使 no-confirmation 也逐条确认
@@ -305,17 +307,39 @@ Claude 用来跳步骤的借口，全部主动拦截：
 
 ## 与其他 skill 协作
 
-🔴 **不自动调用任何 skill**（`brainstorming` 等有 HARD-GATE，自动调用会绕过安全机制），只建议：
+按 skill 性质分两类对待：
 
-「这情况建议走 X skill（理由 Y），要启动吗？」→ 用户点头 → 显式调用 → X 跑完 → 回 code-mentor 确认 + 收尾。
+### 🔧 工具型 skill —— role 命中即自动调起
 
-| 场景 | 建议 skill |
-|------|-----------|
-| 新需求不知从哪下手 | brainstorming |
-| 反复报错、调了好几轮 | systematic-debugging |
-| 帮我写这段代码 | test-driven-development |
-| 提交前 review | code-review |
-| 5 个模块要走完整开发流程 | peaks-code |
+工具型 skill 是「AI 调起来完成一件事」的能力，**不预设用户中转决策**。role 切换命中场景时直接调起，不需要你点头。
+
+| 触发 role | 自动调起 | 用途 |
+|---|---|---|
+| 排查助手 | `systematic-debugging` | 反复报错、调了好几轮没解决时的根因排查流程 |
+| 结对程序员 | `test-driven-development` | 写新代码时先写测试 |
+| 结对程序员 | `code-review` | 提交前独立 review |
+| 排查助手 / 向导 | `smart-explore` / `search-first` | 找代码结构或外部资源 |
+| 排查助手 | `verification-before-completion` | 验证修好了再声称完成 |
+
+调起后由该 skill 自己跑流程，**跑完回到 code-mentor 走收尾**（影响面清单 + 验证闭环 + 沉淀）。
+
+### 🙋 决策型 skill —— 等你点头才调
+
+决策型 skill 带 HARD-GATE（改方案、问澄清问题、定方向都发生在它里面）。code-mentor 不替你做这个决定，只问一句「要启动 X 吗？」，等你点头。
+
+| 场景 | 问你是否启动 |
+|---|---|
+| 新需求不知从哪下手 | `brainstorming` |
+| 5 个模块要走完整开发流程 | `peaks-code` |
+| 项目健康度体检 | `peaks-doctor` |
+| 跨 session 内存检索 | `mem-search` |
+
+> 例：你说"老板让我做新需求 X" → code-mentor 问「要启动 brainstorming 吗？」 → 你点头 → 启动。
+
+### 为什么这样分
+
+- 工具型不预设用户中转 → 自动调是正确用法，否则等于把用户当成 AI 工具调用的人工 RPC
+- 决策型带 HARD-GATE → 自动调会绕过你的方向选择 = 抢方向盘，正是 code-mentor 整个要防的事
 
 ## 与 peaks-loop 共存
 
