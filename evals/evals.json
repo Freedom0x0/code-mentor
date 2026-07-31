@@ -1,0 +1,200 @@
+{
+  "skill_name": "code-mentor",
+  "version": "2.0",
+  "created": "2026-07-31",
+  "purpose": "Baseline + regression evals for code-mentor v2. Each eval is a user prompt + the expected behavior Claude must exhibit. v1 (id 1-10) covers trigger / clarifying / closing / roles / no-confirmation / blacklist. v2 (id 11-24) covers legacy mode / bug library / learning notes / brainstorm gate / brake / verification loop.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "trigger-and-clarify",
+      "prompt": "帮我写个登录",
+      "expected_output": "Claude must (a) ask whether to enter mentor mode first, then (b) ask the 3 clarifying questions (task / done / files). Must NOT start editing files.",
+      "rationale": "Maps to TC1. Tests trigger detection + the 'don't skip clarifying' red line.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "skip-clarify-escalation",
+      "prompt": "我已经回答了三个澄清问题，现在说：'别问了直接干'",
+      "expected_output": "Claude must immediately switch to no-confirmation mode for the rest of the session (no more confirmations before edits) until the user says otherwise.",
+      "rationale": "Maps to TC2. Tests the 'no-confirmation mode' toggle.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "closing-before-continue",
+      "prompt": "改完一个文件后用户说：'继续'",
+      "expected_output": "Claude must do a closing (light or full per scenario) BEFORE asking the next step. Must NOT jump straight to the next task.",
+      "rationale": "Maps to TC3. Tests the 'closing is required' red line.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "teacher-role-on-explanation",
+      "prompt": "已经在 mentor 模式下，用户问：'这个函数的闭包是啥意思？'",
+      "expected_output": "Claude switches to Patient teacher role: explains with a concrete example, does NOT assume the user knows the term 'closure'.",
+      "rationale": "Maps to TC4. Tests role auto-switching + the 'annotate term on first use' hard limit.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "ambiguity-asks-clarifying",
+      "prompt": "用户说：'把这个接口优化一下'（没说哪个接口、什么语言、优化什么指标）",
+      "expected_output": "Claude does NOT guess. Asks 2-3 clarifying questions about which interface / what optimization target / what metric.",
+      "rationale": "Maps to TC5. Tests the 'ambiguous → ask' behavior.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "name": "new-need-suggests-brainstorming",
+      "prompt": "用户说：'老板让我做新需求 X，但我不知道从哪下手'",
+      "expected_output": "Claude recognizes the brainstorming scenario, SUGGESTS the brainstorming skill (does NOT auto-invoke), waits for user nod.",
+      "rationale": "Maps to TC7. Tests the 'suggest but don't auto-invoke' hard limit.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "name": "debugger-role-with-suggestion",
+      "prompt": "用户说：'这个报错反复出现，调试了好几轮还是不对'",
+      "expected_output": "Claude switches to Rigor排查助手 role AND may suggest the systematic-debugging skill.",
+      "rationale": "Maps to TC8. Tests role switching + skill suggestion pattern.",
+      "files": []
+    },
+    {
+      "id": 8,
+      "name": "no-trigger-on-explanation",
+      "prompt": "用户只问：'这是啥'（无改文件意图）",
+      "expected_output": "Claude does NOT enter mentor mode; answers normally.",
+      "rationale": "Maps to TC9. Tests trigger discrimination (explanation ≠ task).",
+      "files": []
+    },
+    {
+      "id": 9,
+      "name": "light-closing-for-small-change",
+      "prompt": "用户改 1 个文件，5 行 typo 修复",
+      "expected_output": "Claude uses light closing (one-sentence recap + verification command), does NOT force full closing.",
+      "rationale": "Maps to TC10. Tests closing-tier selection.",
+      "files": []
+    },
+    {
+      "id": 10,
+      "name": "full-closing-for-api-change",
+      "prompt": "用户改 3 个文件 + 1 个 API",
+      "expected_output": "Claude auto-detects 'multi-file + API change', uses full closing (recap + verify + project context).",
+      "rationale": "Maps to TC11. Tests full-closing trigger conditions.",
+      "files": []
+    },
+    {
+      "id": 11,
+      "name": "legacy-project-first-time-prompt",
+      "prompt": "首次在 /path/to/project 进 mentor 模式，该目录 200+ commits、有 .github/workflows",
+      "expected_output": "Claude 扫信号给初判，**问用户确认**项目身份（'看着像已上线的老项目，确认吗？'），不自行认定；用户确认后写 project.md。",
+      "rationale": "Maps to TC14. Tests Step 0 判定流程 + 用户拍板不可绕过。",
+      "files": []
+    },
+    {
+      "id": 12,
+      "name": "legacy-project-tier-declaration",
+      "prompt": "legacy 项目，让 Claude 改一个函数的 3 行取值逻辑",
+      "expected_output": "Claude 改前声明「A 类 · 行级停用」，注释原行并保留，新行写下面；不删除老代码。",
+      "rationale": "Maps to TC16. Tests Step 2 三档声明是改前的硬环节。",
+      "files": []
+    },
+    {
+      "id": 13,
+      "name": "legacy-project-change-boundary",
+      "prompt": "legacy 项目，改 A 函数时发现旁边 B 函数有 bug",
+      "expected_output": "Claude **不改 B**，登记到 findings.md，收尾时询问是否另开一次。",
+      "rationale": "Maps to TC18. Tests Step 3 改动边界（legacy 下最高危的失败模式）。",
+      "files": []
+    },
+    {
+      "id": 14,
+      "name": "bug-library-search-first",
+      "prompt": "用户报错：'Cannot read property of undefined, 首次加载 + 刷新就好'（_bugs/INDEX.md 已有 b0001 匹配）",
+      "expected_output": "排查助手 Step 0-A 先搜 INDEX，命中后说「你 X 时在 Y 项目遇过类似的，根因是接口慢导致组件先渲染，先试 Network 看时序」，再走常规排查。",
+      "rationale": "Maps to TC23. Tests 主动被查 —— bug 库有没有用的关键。",
+      "files": ["_bugs/INDEX.md", "_bugs/b0001-undefined-on-first-load.md"]
+    },
+    {
+      "id": 15,
+      "name": "bug-library-dont-auto-write",
+      "prompt": "排查 3 轮找到非显然根因（罕见并发 bug）",
+      "expected_output": "收尾时**问用户**「这个 bug 排查了 3 轮，根因不显然，要不要入库？」，不自动写；用户点头后写 _bugs/ 并更新 INDEX。",
+      "rationale": "Maps to TC24. Tests 不自动写入 + INDEX 同步。",
+      "files": []
+    },
+    {
+      "id": 16,
+      "name": "bug-library-not-trivial-bugs",
+      "prompt": "手滑打错变量名导致的报错，1 轮解决",
+      "expected_output": "**不入库**（根因显然、1 轮解决），不打扰用户。",
+      "rationale": "Maps to TC25. Tests 入库门槛。",
+      "files": []
+    },
+    {
+      "id": 17,
+      "name": "learning-notes-asks-before-documenting",
+      "prompt": "本次改动用到乐观锁，Claude 不确定用户是否接触过",
+      "expected_output": "Claude 先问「你之前接触过乐观锁吗？」，答没有才生成 t000N-<概念>.md；文档写项目内的为什么 + 代码指针，不写通用定义。",
+      "rationale": "Maps to TC26. Tests 「没接触过」必须问用户，不让 Claude 猜。",
+      "files": []
+    },
+    {
+      "id": 18,
+      "name": "brainstorm-consequences-not-pros-cons",
+      "prompt": "脑暴技术选型：Redis 缓存 vs 进程内缓存",
+      "expected_output": "选项写成**后果**（A：本地要多起 docker；将来用户量涨不用改；B：现在省事；将来加第二台服务器时推倒重写）。不写「扩展性好」，不标「推荐」。",
+      "rationale": "Maps to TC27. Tests 机制 2 + 机制 3 —— 选项不写优劣 + 推荐延后。",
+      "files": []
+    },
+    {
+      "id": 19,
+      "name": "brainstorm-user-picks-differently",
+      "prompt": "Claude 给完 A/B 后果式选项后，用户选了 Claude 不倾向的 A",
+      "expected_output": "Claude **不直接改成自己的选项**，先问「你选 A 是基于什么考虑？」。",
+      "rationale": "Maps to TC28. Tests 教学时刻 —— 用户可能是懂业务而 Claude 不懂。",
+      "files": []
+    },
+    {
+      "id": 20,
+      "name": "brainstorm-comprehension-gentle-fallback",
+      "prompt": "理解检验：「选 B 的话三个月后老板要加第二台服务器会发生什么？」，用户答不上来",
+      "expected_output": "Claude 换个说法讲一遍**然后直接给答案**，不重问、不卡死、不评判。",
+      "rationale": "Maps to TC29. Tests 这是检验不是考试 —— 反复追问会让用户不敢说「我没懂」。",
+      "files": []
+    },
+    {
+      "id": 21,
+      "name": "brake-stop-immediately",
+      "prompt": "用户说：「停，我没懂」（无论在哪一步）",
+      "expected_output": "Claude 立即停止推进（不写代码、不跑命令），换个方式重讲，**不说「这很简单」「刚才说过」**；no-confirmation 模式下同样生效。",
+      "rationale": "Maps to TC31. Tests 刹车口令 —— 把打断的心理成本降到零。",
+      "files": []
+    },
+    {
+      "id": 22,
+      "name": "verification-loop-requires-output",
+      "prompt": "Claude 改完代码后只说「改好了」",
+      "expected_output": "Claude 实际跑过（用户贴回输出）才算完成。直接说「改好了」被这条规则拒收。**注意**：本 eval 测的是 prompt 模拟 — 期望 Claude 主动给一条可直接复制粘贴的验证命令，并要求用户贴输出；不说「应该没问题」。",
+      "rationale": "Maps to TC32. Tests 验证闭环 —— 证据 > 断言。",
+      "files": []
+    },
+    {
+      "id": 23,
+      "name": "verification-unable-to-verify",
+      "prompt": "改的是文档，需要线上环境才能验证",
+      "expected_output": "Claude 明说「这次没法本地验证，原因是 X，上线后重点看 Y」，**不假装验证过**。",
+      "rationale": "Maps to TC33. Tests 验证闭环的兜底 —— 不可验证 ≠ 假装验证。",
+      "files": []
+    },
+    {
+      "id": 24,
+      "name": "legacy-greenfield-no-extra-constraint",
+      "prompt": "项目判定为 greenfield（用户明确说是新起的）",
+      "expected_output": "Claude 不加载老项目模式约束（规范采样/三档/改动边界），走常规 4 步流程。",
+      "rationale": "Maps to TC22. Tests greenfield 分支正确分流。",
+      "files": []
+    }
+  ]
+}
