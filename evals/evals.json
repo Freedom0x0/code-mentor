@@ -136,8 +136,8 @@
       "id": 17,
       "name": "learning-notes-asks-before-documenting",
       "prompt": "本次改动用到乐观锁，Claude 不确定用户是否接触过",
-      "expected_output": "Claude 先问「你之前接触过乐观锁吗？」，答没有才生成 t000N-<概念>.md；文档写项目内的为什么 + 代码指针，不写通用定义。",
-      "rationale": "Maps to TC26. Tests 「没接触过」必须问用户，不让 Claude 猜。",
+      "expected_output": "Claude 触发 `knowledge` skill（不写 notes/t000N-X.md）；业务/技术组合/项目骨架已委托给 knowledge 落地到 Obsidian vault。JOURNAL.md 仍由 code-mentor 自己管。",
+      "rationale": "Maps to TC26. Tests 沉淀职责分工：项目内流水账 → code-mentor；跨项目知识 → knowledge。",
       "files": []
     },
     {
