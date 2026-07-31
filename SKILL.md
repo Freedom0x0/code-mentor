@@ -90,7 +90,7 @@ description: Use when you are a junior developer asking Claude to help write, mo
 | 条件 | 动作 |
 |------|------|
 | 本次有编辑 | `notes/JOURNAL.md` 追加 1 行 |
-| 用到用户没接触过的概念 | 问「你之前接触过 X 吗？」→ 没有则写 `notes/t000N-X.md` |
+| 用到用户没接触过的概念 | 触发 `knowledge` skill 写入 `tech-stacks/` 或 `scaffolds/` |
 | 排查 ≥2 轮且根因不显然 | 问「要不要入库？」→ 是则写 `_bugs/` 并更新 INDEX |
 | 脑暴中做了重决策 | 写 `DECISIONS.md` |
 | 发现了没改的问题 | 已在 findings.md，问是否另开一次 |
@@ -202,24 +202,23 @@ no-confirmation 模式下**仍需说出档位**（可不等确认）。
 
 ## 学习笔记
 
-位置 `~/.claude/code-mentor/<项目>/notes/`
+🔴 **业务知识、技术选型组合、项目骨架的沉淀已交给 `knowledge` skill**（独立仓库 Freedom0x0/knowledge，落地 Obsidian vault）。code-mentor 不再重复这一层。
 
-🔴 **不写"什么是 X"**（网上一搜一大把，用户不看）。
-✅ **写：在这个项目里为什么用它、用在哪一行、不用会怎样。**
+code-mentor 自己只保留项目级流水账：
 
-> ❌「数据库事务是一组要么全成功要么全回滚的操作，具有 ACID 特性……」
-> ✅「订单创建这里加了事务（`OrderService.java:47`），因为扣库存和写订单必须同生共死。不加的话扣了库存但订单写失败，库存就白扣了 —— 上线后极难查，因为数据看起来是"对"的。」
+**`notes/JOURNAL.md`** —— 每次有编辑的收尾追加 1 行（不改文件就不写）：
 
-🔴 **必须带代码指针**（`文件:行号`）。
+```
+- 2026-07-30 | 促销价 | src/priceUtil.js:42 | 用 ?? 不用 ||，因为 0 是合法价格会被 || 吞掉
+```
 
-**两档**：
-- **日常** —— 每次有编辑的收尾，`JOURNAL.md` 追加 1 行：
-  `- 2026-07-30 | 促销价 | src/priceUtil.js:42 | 用 ?? 不用 ||，因为 0 是合法价格会被 || 吞掉`
-- **成篇** —— 用到用户没接触过的概念时生成 `t000N-<概念>.md`：它解决什么问题（用本次场景，不用教科书例子）/ 在本项目哪里用了（文件:行号 + 代码）/ 不用会怎样 / **什么时候不该用** / 想深入看什么（1-2 个链接）
+**不在 code-mentor 管的**：
+- 业务术语 / 流转规则 → 触发 `knowledge` 写 `<vault>/.knowledge/business/`
+- 技术组合（rust+react+nestjs 这类） → 触发 `knowledge` 写 `tech-stacks/`
+- 项目骨架 / 目录约定 → 触发 `knowledge` 写 `scaffolds/`
+- 教学文档（"什么是 X"）→ **不写**。knowledge 的 tech-stacks/scaffolds 模板覆盖了
 
-「什么时候不该用」不能省 —— 小白学到新东西最容易到处套用。
-
-🔴 **怎么判断"没接触过"：问用户一句**，不要猜。
+code-mentor 收尾沉淀表里，"用到用户没接触过的概念"这条**改成触发 knowledge**，而不是写 `t000N-X.md`。
 
 ## 脑暴理解检验
 
@@ -320,6 +319,7 @@ Claude 用来跳步骤的借口，全部主动拦截：
 | 结对程序员 | `code-review` | 提交前独立 review |
 | 排查助手 / 向导 | `smart-explore` / `search-first` | 找代码结构或外部资源 |
 | 排查助手 | `verification-before-completion` | 验证修好了再声称完成 |
+| 收尾沉淀触发 | `knowledge` | 业务/技术组合/项目骨架入库到 Obsidian vault（见 §学习笔记） |
 
 调起后由该 skill 自己跑流程，**跑完回到 code-mentor 走收尾**（影响面清单 + 验证闭环 + 沉淀）。
 
@@ -382,7 +382,7 @@ Claude 按 description 匹配触发，无优先级/抑制机制，双方互不�
 
 ```
 ~/.claude/code-mentor/
-  _bugs/                    # 跨项目共享
+  _bugs/                    # 跨项目共享 —— bug 库（code-mentor 自己管）
     INDEX.md                # 症状速查表
     b0001-<症状>.md          # 详情
   <目录名>-<路径哈希6位>/     # 哈希防同名项目串档案
@@ -391,6 +391,20 @@ Claude 按 description 匹配触发，无优先级/抑制机制，双方互不�
     findings.md             # 发现但未改的问题
     DECISIONS.md            # 重决策日志
     notes/
-      JOURNAL.md            # 每次改动 1 行
-      t0001-<概念>.md        # 教学文档
+      JOURNAL.md            # 每次改动 1 行（项目内流水账）
+```
+
+🔴 **业务/技术组合/项目骨架 → 委托给 `knowledge` skill**，落到 `<你的 Obsidian vault>/.knowledge/`。code-mentor 不再写 `t000N-<概念>.md`。
+
+---
+
+**knowledge skill 写入位置**（参考，不在 code-mentor 管理）：
+
+```
+<vault>/
+  .knowledge/
+    INDEX.md
+    business/      b0001-<业务术语>.md
+    tech-stacks/   t0001-<技术组合>.md
+    scaffolds/     s0001-<项目骨架>.md
 ```

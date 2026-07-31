@@ -30,7 +30,7 @@
 | 在老项目里顺手优化一下，把生产炸了 | 老项目安全模式：只碰点名文件，findings 登记 |
 | 重复踩同一个 bug | Bug 库：跨项目共享，按症状索引，下次主动查 |
 | 脑暴时 Claude 给一堆看不懂的选项，选「推荐」完事 | 脑暴理解检验：选项写后果不写优劣，用户先选，Claude 再说倾向 |
-| 学不到东西，每次靠 AI 代写 | 学习笔记：JOURNAL + 新概念成篇，写项目内的为什么 |
+| 学不到东西，每次靠 AI 代写 | 学习笔记：项目内 JOURNAL.md 流水账 + 新概念/技术组合触发 [`knowledge`](https://github.com/Freedom0x0/knowledge) skill |
 | 三个月后看老代码忘记当初为什么这么写 | DECISIONS.md：每个重决策含「什么时候该推翻」 |
 
 ---
@@ -97,7 +97,7 @@
 
 ### 📝 学习笔记
 
-每次改动收尾时往 `notes/JOURNAL.md` 追加 1 行。遇到没接触过的概念生成 `t000N-<概念>.md`，**写项目内的为什么 + 代码指针**，不写通用定义。
+每次改动收尾时往 `notes/JOURNAL.md` 追加 1 行。**业务知识、技术选型组合、项目骨架**这些跨项目的沉淀，已委托给独立的 [`knowledge`](https://github.com/Freedom0x0/knowledge) skill —— 落地到你的 Obsidian vault，不在 code-mentor 里写。
 
 > ❌「数据库事务是一组要么全成功要么全回滚的操作，具有 ACID 特性……」
 > ✅「订单创建这里加了事务（`OrderService.java:47`），因为扣库存和写订单必须同生共死。不加的话扣了库存但订单写失败，库存就白扣了 —— 上线后极难查，因为数据看起来是"对"的。」
@@ -183,9 +183,10 @@ code-mentor 识别到适合 X skill 的场景
     findings.md                   # 发现但未改的可疑点
     DECISIONS.md                  # 重决策日志（含「什么时候该推翻」）
     notes/
-      JOURNAL.md                  # 每次改动 1 行
-      t0001-<概念>.md              # 教学文档（遇到新概念才生成）
+      JOURNAL.md                  # 每次改动 1 行（项目内流水账）
 ```
+
+🔴 **业务/技术组合/项目骨架不在这里** —— 委托给 [`knowledge`](https://github.com/Freedom0x0/knowledge) skill，落到你的 Obsidian vault 的 `.knowledge/` 目录。
 
 ---
 
