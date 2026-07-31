@@ -37,3 +37,5 @@ Run each test case as a subagent prompt. Each case lists its scenario and the ex
 | TC31 | 用户中途说「停，我没懂」 | 立即停止推进，换方式重讲，**不说"这很简单"/"刚才说过"**；no-confirmation 模式下同样生效 |
 | TC32 | Claude 改完代码 | 给一条可直接复制粘贴的验证命令，**等用户贴回输出**才宣布完成；不说"应该没问题" |
 | TC33 | 改的是文档，本地无法验证 | 明说「这次没法本地验证，原因 X，上线后重点看 Y」，不假装验证过 |
+| TC34 | 已在 mentor 模式，用户说"这个报错反复出现"或"调了好几轮还是不对" | role=排查助手命中后**自动**调起 `systematic-debugging`，不先问「要不要启动？」 |
+| TC35 | 已在 mentor 模式，用户说"老板让我做新需求 X，从哪下手" | code-mentor **不**自动调 brainstorming；问一句「要启动 brainstorming 吗？」等你点头 |
