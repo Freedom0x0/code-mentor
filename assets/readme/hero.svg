@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-labelledby="hero-title hero-desc" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <title id="hero-title">code-mentor — 让 Claude 改你的代码前先问清楚</title>
+  <desc id="hero-desc">一个给初级开发者用的 Claude skill，强制 Claude 走 4 步节奏（澄清→对齐→执行→收尾），13 条红线拦截跳步骤。</desc>
+
+  <rect width="1200" height="320" fill="#FAFAF9"/>
+
+  <!-- 左侧 title 区 -->
+  <g transform="translate(64 64)">
+    <!-- eyebrow -->
+    <text x="0" y="0" font-size="18" font-weight="500" fill="#6E7681" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace">CLAUDE SKILL · v2.0</text>
+
+    <!-- H1 -->
+    <text x="0" y="60" font-size="60" font-weight="700" fill="#0F1419" letter-spacing="-1">code-mentor</text>
+
+    <!-- 一句话价值 -->
+    <text x="0" y="110" font-size="22" font-weight="500" fill="#1F2328">让 Claude 在改你的代码之前先问清楚、改的时候等你点头、</text>
+    <text x="0" y="142" font-size="22" font-weight="500" fill="#1F2328">改完之后走完收尾 —— 而不是默默接管代码库。</text>
+
+    <!-- STOP 标记 + tagline -->
+    <g transform="translate(0 180)">
+      <rect x="0" y="-18" width="40" height="26" rx="4" fill="#DC2626"/>
+      <text x="20" y="0" font-size="14" font-weight="700" fill="#FAFAF9" text-anchor="middle" letter-spacing="1">STOP</text>
+      <text x="52" y="0" font-size="16" font-weight="500" fill="#1F2328">你留在主导位置，Claude 跟着节奏走</text>
+    </g>
+
+    <!-- metadata row -->
+    <g transform="translate(0 218)" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="13" fill="#6E7681">
+      <text x="0" y="0">4-step</text>
+      <text x="70" y="0">·</text>
+      <text x="84" y="0">5 roles</text>
+      <text x="148" y="0">·</text>
+      <text x="162" y="0">13 red lines</text>
+      <text x="266" y="0">·</text>
+      <text x="280" y="0">v2.0 (2026-07-31)</text>
+    </g>
+  </g>
+
+  <!-- 右侧 terminal 示意：刹车口令交互 -->
+  <g transform="translate(740 56)">
+    <!-- terminal window -->
+    <rect x="0" y="0" width="396" height="208" rx="10" fill="#0F1419" stroke="#1F2328"/>
+    <!-- title bar -->
+    <rect x="0" y="0" width="396" height="32" rx="10" fill="#1F2328"/>
+    <rect x="0" y="22" width="396" height="10" fill="#1F2328"/>
+    <!-- traffic lights -->
+    <circle cx="20" cy="16" r="5" fill="#FF5F57"/>
+    <circle cx="40" cy="16" r="5" fill="#FEBC2E"/>
+    <circle cx="60" cy="16" r="5" fill="#28C840"/>
+    <text x="198" y="20" font-size="12" fill="#6E7681" text-anchor="middle" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace">claude · mentor mode</text>
+
+    <!-- transcript -->
+    <g transform="translate(20 60)" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="13">
+      <text y="0" fill="#7EE787">$</text>
+      <text x="14" y="0" fill="#FAFAF9">帮我写个登录 handler</text>
+
+      <text y="28" fill="#6E7681">→ 先问 3 个问题：</text>
+      <text y="48" fill="#FAFAF9">  1. 任务是？</text>
+      <text y="66" fill="#FAFAF9">  2. 完成标准？</text>
+      <text y="84" fill="#FAFAF9">  3. 涉及哪些文件？</text>
+
+      <text y="116" fill="#7EE787">$</text>
+      <text x="14" y="116" fill="#DC2626" font-weight="600">停，我没懂</text>
+
+      <text y="144" fill="#6E7681">→ 🛑 换比喻重讲，不评判</text>
+    </g>
+  </g>
+</svg>
