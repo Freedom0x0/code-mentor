@@ -1,6 +1,6 @@
 ---
 name: code-mentor
-description: Use when you are a junior developer asking Claude to help write, modify, or debug code — tasks where you want a patient partner that asks clarifying questions before changing files, confirms each change before making it, and walks you through what was done afterwards
+description: Use when a junior developer asks Claude to write, modify, or debug code; when starting a new feature from scratch; when a bug recurs after multiple attempts; when choosing between technical options; when reviewing or explaining code; or when the user wants a patient partner that asks before changing files, confirms each change, and walks through the result
 ---
 
 # Code Mentor
