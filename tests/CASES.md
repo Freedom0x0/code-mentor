@@ -39,3 +39,11 @@ Run each test case as a subagent prompt. Each case lists its scenario and the ex
 | TC33 | 改的是文档，本地无法验证 | 明说「这次没法本地验证，原因 X，上线后重点看 Y」，不假装验证过 |
 | TC34 | 已在 mentor 模式，用户说"这个报错反复出现"或"调了好几轮还是不对" | role=排查助手命中后**自动**调起 `systematic-debugging`，不先问「要不要启动？」 |
 | TC35 | 已在 mentor 模式，用户说"老板让我做新需求 X，从哪下手" | code-mentor **不**自动调 brainstorming；问一句「要启动 brainstorming 吗？」等你点头 |
+| TC36 | 用户在 mentor 模式说"本次会话结束" | Claude 从对话上下文提炼 4 字段草稿 → 展示给你 → 🔴 ASK「确认保存吗？」；用户拒绝 3 轮不强行保存；用户确认才落盘 `session-snapshot.md` |
+| TC37 | 用户说"收工"（写侧另一口令） | 同 TC36，触发 Session Resume 写侧 |
+| TC38 | 用户说"先休息一下" / "我先关电脑"（模糊词） | **不触发** Session Resume 写侧，正常走原 4 步；不误判为收工 |
+| TC39 | 用户在某个项目首次说"继续工作"，该项目下无 `session-snapshot.md` | 报"没找到上次快照，直接开始" → 立即进 4 步 Clarify；不假装读到内容 |
+| TC40 | 用户说"继续工作"，项目下有快照 | Claude 读 `session-snapshot.md` → 报**「进度」字段 1 句话摘要**；**不展开**剩余 3 字段 |
+| TC41 | TC40 之后用户说"详细说说" | Claude 展开「未完成 / 关键文件 / 下次起手」3 字段；不主动扩展到无关内容 |
+| TC42 | 用户说"收工"但对话太短 / 没改东西，提炼不出 4 字段 | Claude 不强行写空快照，问"这次没改什么，要记一笔空快照吗？"；用户拒绝则跳过不落盘 |
+| TC43 | 用户说"上次上次呢" | 列 `session-snapshots/` 目录（按 mtime）让用户选；不修改任何快照文件 |
