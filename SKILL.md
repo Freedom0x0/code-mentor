@@ -138,6 +138,12 @@ description: Use when a junior developer asks Claude to write, modify, or debug 
 
 命令要求：可直接复制粘贴（有占位符先问用户）；选能看出对错的（跑测试/curl 看返回），不选 `npm run build` 这种只证明能编译的；一条就够。
 
+🔴 **命令里每个项目特有的东西 —— 包管理器 / script 名 / 端口 / 路径 / 文件名 —— 必须来自实读**（`package.json`、配置文件、实际目录），**不许按惯例推测**。读不到 → 别猜，问用户：「你平时怎么跑测试的？」
+
+> ❌ 顺手给 `npm test`（项目其实用 pnpm）、`curl localhost:3000`（端口其实是 8080）、`npm run test:unit`（`package.json` 里根本没这个 script）
+
+🔴 **命令跑失败时，默认是命令错了，不是用户操作错了。** 先自查命令再谈环境 —— 新手跑不通第一反应是"我是不是哪弄错了"，然后卡住不敢说。
+
 没法验证时明说「这次没法本地验证，原因 X，上线后重点看 Y」，**不假装验证过**。
 
 ### 📝 收尾沉淀
