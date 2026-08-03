@@ -21,9 +21,13 @@ description: Use when a junior developer asks Claude to write, modify, or debug 
    ├─ 脑暴/选型 → §脑暴理解检验
    │    └─ 决策型 skill（brainstorming / peaks-prd）→ 问「要启动 X 吗？」等你点头
    ├─ 需求模糊 → 不猜，问 2-3 个澄清问题
+   ├─ 用户给了事实断言 → ⓪ 先读源码核对再动手（§前提核对）
+   ├─ 定【验证标准】三段式 → 🔴 有空则回 Clarify（§Align）
    ├─ 改文件/API/依赖 → 说改什么+为什么 → 🔴 等确认（no-confirmation 模式除外）
+   │    ├─ 命中签名/契约/共享状态/配置 → 先给【级联影响面】清单（写后果不写术语）
    │    ├─ 黑名单动作 → 即使 no-confirmation 也逐条确认
    │    └─ legacy → 规范采样 → 声明档位 → 只碰点名文件
+   ├─ 要委派出去（subagent/子 skill）→ 📦 三样保护写进 prompt（§委派契约）
    └─ 改完 → 收尾
         light（≤1 文件 且 ≤20 行 且 不碰 config/API/DB）| full（其余）
         legacy 且有编辑 → 追加影响面清单

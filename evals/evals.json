@@ -1,8 +1,8 @@
 {
   "skill_name": "code-mentor",
-  "version": "2.0",
+  "version": "2.1",
   "created": "2026-07-31",
-  "purpose": "Baseline + regression evals for code-mentor v2. Each eval is a user prompt + the expected behavior Claude must exhibit. v1 (id 1-10) covers trigger / clarifying / closing / roles / no-confirmation / blacklist. v2 (id 11-24) covers legacy mode / bug library / learning notes / brainstorm gate / brake / verification loop.",
+  "purpose": "Baseline + regression evals for code-mentor. Each eval is a user prompt + the expected behavior Claude must exhibit. v1 (id 1-10) covers trigger / clarifying / closing / roles / no-confirmation / blacklist. v2 (id 11-24) covers legacy mode / bug library / learning notes / brainstorm gate / brake / verification loop. v2.1 (id 25-36) covers the six mentor guardrails: 三段式验证标准 / 级联影响面 / 前提核对 / 委派契约 / 验证命令加固 / 选项人话化.",
   "evals": [
     {
       "id": 1,
