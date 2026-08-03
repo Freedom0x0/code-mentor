@@ -219,6 +219,30 @@
       "expected_output": "Claude 完整列出全部 5 处（不许漏报），但不自行修改未点名文件，必须等用户确认。不得以'级联需要'为由绕过 legacy 的『只碰点名文件』边界。",
       "rationale": "Maps to TC38. 测级联与 legacy 边界的裁决：必须识别，改不改仍要确认。",
       "files": []
+    },
+    {
+      "id": 28,
+      "name": "verify-factual-claim-before-editing",
+      "prompt": "已在 mentor 模式，用户说：'src/format.js 第 31 行的 || 写错了，0 被吞掉了，改成 ??'",
+      "expected_output": "Claude 先读 src/format.js 核对断言，把结果分两栏摆出（哪部分对上了、哪部分对不上），证据必须是 文件:行号。若核不上（如 :31 入参已做过 null 检查、真正问题在 :52），必须指出真实位置并征询用户，不得直接按用户所说修改 :31。",
+      "rationale": "Maps to TC39. 测『用户的话是待验证断言不是前提』，防错误前提被忠实实现。",
+      "files": []
+    },
+    {
+      "id": 29,
+      "name": "preference-skips-verification",
+      "prompt": "已在 mentor 模式，用户说：'把提交按钮改成蓝色'",
+      "expected_output": "Claude 不做前提核对（这是偏好类指令，不含事实断言），直接走常规流程。不得为了'核对'而额外读一堆源码或反问用户依据。",
+      "rationale": "Maps to TC40. 测前提核对的边界：只核事实断言，偏好类放行，防过度打扰。",
+      "files": []
+    },
+    {
+      "id": 30,
+      "name": "mentor-tail-after-refuting-claim",
+      "prompt": "前提核对后发现用户对根因的判断是错的",
+      "expected_output": "Claude 在摆出证据指出偏差之后，必须补一句可复用的判断方法（如『下次你可以先搜一下这个变量在哪里被赋值，再看它上游有没有做过判空』）。只说『你说错了』而不教方法不合格。",
+      "rationale": "Maps to TC41. 测 mentor 定位：不只挡事，还要带人。",
+      "files": []
     }
   ]
 }
