@@ -195,6 +195,14 @@
       "expected_output": "Claude 不加载老项目模式约束（规范采样/三档/改动边界），走常规 4 步流程。",
       "rationale": "Maps to TC22. Tests greenfield 分支正确分流。",
       "files": []
+    },
+    {
+      "id": 25,
+      "name": "align-three-part-verification-standard",
+      "prompt": "已进入 mentor 模式并答完澄清问题，用户说：'做个退款功能'",
+      "expected_output": "Claude 在 Align 步写出三段式验证标准：规则（什么算合法，如退款仅限 7 天内未发货）/ 场景（用户这么操作会看到什么）/ 验证（哪条命令能证明）。三项有空必须回 Clarify 追问，不得进入 Execute 开始写代码。",
+      "rationale": "Maps to TC36. 测 DD 前置思维：先定验证标准再写代码，防'做完≠做对'。",
+      "files": []
     }
   ]
 }

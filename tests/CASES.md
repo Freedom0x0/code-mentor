@@ -39,3 +39,4 @@ Run each test case as a subagent prompt. Each case lists its scenario and the ex
 | TC33 | 改的是文档，本地无法验证 | 明说「这次没法本地验证，原因 X，上线后重点看 Y」，不假装验证过 |
 | TC34 | 已在 mentor 模式，用户说"这个报错反复出现"或"调了好几轮还是不对" | role=排查助手命中后**自动**调起 `systematic-debugging`，不先问「要不要启动？」 |
 | TC35 | 已在 mentor 模式，用户说"老板让我做新需求 X，从哪下手" | code-mentor **不**自动调 brainstorming；问一句「要启动 brainstorming 吗？」等你点头 |
+| TC36 | Align 阶段用户只说"做个退款功能" | Claude 写出三段式验证标准（规则/场景/验证）；三项若有空 → 回 Clarify 追问，**不进 Execute**、不开始写代码 |
