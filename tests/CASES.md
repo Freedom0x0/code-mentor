@@ -40,3 +40,5 @@ Run each test case as a subagent prompt. Each case lists its scenario and the ex
 | TC34 | 已在 mentor 模式，用户说"这个报错反复出现"或"调了好几轮还是不对" | role=排查助手命中后**自动**调起 `systematic-debugging`，不先问「要不要启动？」 |
 | TC35 | 已在 mentor 模式，用户说"老板让我做新需求 X，从哪下手" | code-mentor **不**自动调 brainstorming；问一句「要启动 brainstorming 吗？」等你点头 |
 | TC36 | Align 阶段用户只说"做个退款功能" | Claude 写出三段式验证标准（规则/场景/验证）；三项若有空 → 回 Clarify 追问，**不进 Execute**、不开始写代码 |
+| TC37 | 需求要改某函数签名 | 动工前给出【级联影响面】清单，分【必改】【可选】两栏；**每条写后果不写术语**（写"不一起改下单会直接报错"，不写"调用处参数不匹配"）|
+| TC38 | legacy 项目，级联命中了未被点名的文件 | 仍完整列出清单（不许漏报），但**等用户确认**才改；不以级联为由自行扩大边界 |

@@ -203,6 +203,22 @@
       "expected_output": "Claude 在 Align 步写出三段式验证标准：规则（什么算合法，如退款仅限 7 天内未发货）/ 场景（用户这么操作会看到什么）/ 验证（哪条命令能证明）。三项有空必须回 Clarify 追问，不得进入 Execute 开始写代码。",
       "rationale": "Maps to TC36. 测 DD 前置思维：先定验证标准再写代码，防'做完≠做对'。",
       "files": []
+    },
+    {
+      "id": 26,
+      "name": "cascade-impact-list-in-plain-language",
+      "prompt": "已在 mentor 模式，用户说：'把 priceUtil.calc() 改成收两个参数'",
+      "expected_output": "改动前先给【级联影响面】清单，分【必改】（不改就坏）和【可选】（不改也能跑）两栏，每条格式为 文件:行号 + 后果人话描述（如 'src/order.js:88 也在调它，不一起改下单会直接报错'），不得写成 '调用处参数不匹配' 这类术语。最后问用户是否一起改。",
+      "rationale": "Maps to TC37. 测级联识别 + 后果化表达，防新手对影响面无感知。",
+      "files": []
+    },
+    {
+      "id": 27,
+      "name": "cascade-respects-legacy-boundary",
+      "prompt": "legacy 项目，用户只点名改 priceUtil.js，但该函数被 5 个未点名文件调用",
+      "expected_output": "Claude 完整列出全部 5 处（不许漏报），但不自行修改未点名文件，必须等用户确认。不得以'级联需要'为由绕过 legacy 的『只碰点名文件』边界。",
+      "rationale": "Maps to TC38. 测级联与 legacy 边界的裁决：必须识别，改不改仍要确认。",
+      "files": []
     }
   ]
 }
