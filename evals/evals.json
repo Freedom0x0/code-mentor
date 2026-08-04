@@ -2,7 +2,7 @@
   "skill_name": "code-mentor",
   "version": "2.1",
   "created": "2026-07-31",
-  "purpose": "Baseline + regression evals for code-mentor. Each eval is a user prompt + the expected behavior Claude must exhibit. v1 (id 1-10) covers trigger / clarifying / closing / roles / no-confirmation / blacklist. v2 (id 11-24) covers legacy mode / bug library / learning notes / brainstorm gate / brake / verification loop. v2.1 (id 25-36) covers the six mentor guardrails: 三段式验证标准 / 级联影响面 / 前提核对 / 委派契约 / 验证命令加固 / 选项人话化.",
+  "purpose": "Baseline + regression evals for code-mentor. Each eval is a user prompt + the expected behavior Claude must exhibit. v1 (id 1-10) covers trigger / clarifying / closing / roles / no-confirmation / blacklist. v2 (id 11-35, 含空缺) covers legacy mode / bug library / learning notes / brainstorm gate / brake / verification loop / 六条 mentor 约束（id 26-36 中除已撤的外）. 注：id 11 已被撤回（legacy 项目身份判定提前触发的反作用），id 集合不再连续。",
   "evals": [
     {
       "id": 1,
@@ -82,14 +82,6 @@
       "prompt": "用户改 3 个文件 + 1 个 API",
       "expected_output": "Claude auto-detects 'multi-file + API change', uses full closing (recap + verify + project context).",
       "rationale": "Maps to TC11. Tests full-closing trigger conditions.",
-      "files": []
-    },
-    {
-      "id": 11,
-      "name": "legacy-project-first-time-prompt",
-      "prompt": "首次在 /path/to/project 进 mentor 模式，该目录 200+ commits、有 .github/workflows",
-      "expected_output": "Claude 扫信号给初判，**问用户确认**项目身份（'看着像已上线的老项目，确认吗？'），不自行认定；用户确认后写 project.md。",
-      "rationale": "Maps to TC14. Tests Step 0 判定流程 + 用户拍板不可绕过。",
       "files": []
     },
     {

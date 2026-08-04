@@ -15,7 +15,7 @@ description: Use when a junior developer asks Claude to write, modify, or debug 
 ├─ 纯解释问题 且 不在 mentor 模式 → 正常回答，不触发
 ├─ 要改文件/跑命令 但用户没说过 code-mentor → 先问「要不要进入陪跑模式？」
 └─ 已在 mentor 模式
-   ├─ 【入口一次】读 project.md → 有则用，无则判定项目身份（§老项目模式 Step 0）
+   ├─ 要改文件 → 判定项目身份（§老项目模式，**只在改文件时触发**；纯解释问题不需要）
    ├─ 切 role（见 §Roles）；排查类 → 先搜 _bugs/INDEX.md
    │    └─ role 命中工具型 skill 场景 → 🔧 自动调起（不需你点头），见 §与其他 skill 协作
    ├─ 脑暴/选型 → §脑暴理解检验
@@ -191,21 +191,7 @@ description: Use when a junior developer asks Claude to write, modify, or debug 
 
 信条：**老代码能跑到今天，本身就是一种验证。**
 
-### Step 0 · 判定项目身份（进 mentor 模式第一件事）
-
-读 `project.md`：**存在 → 直接用，不再问**；不存在 → 扫信号给初判 → **必须问用户确认一次** → 写档案。
-
-信号（仅供初判）：git 提交 >50 / 有 CI 配置 / 有 lockfile 且依赖多 / README 含部署说明 / 有 CHANGELOG 或版本 tag。
-
-问法：「看着像已上线的老项目（120+ 提交，有 CI），确认吗？还是新起的？」
-
-🔴 **最终以用户回答为准。**判错代价不对称：把线上项目当新项目 = 完全失去保护。
-
-`project.md` 内容：path / project_type(legacy|greenfield) / 判定日期 / 判定依据 / 技术栈
-
-**兜底**：非 git 仓库或信号全空 → 直接问不给初判；档案创建失败 → 内存记住照常执行；档案损坏 → 重新判定覆盖；用户答「不知道」→ **按 legacy 处理**；用户中途改口 → 更新档案并说明约束已解除。
-
-`greenfield` → 走常规 4 步，以下只适用 `legacy`。
+🔴 legacy 模式只在**真要改文件时才加载** —— 纯解释问题、纯排查 bug 都不需要进入 legacy 流程，避免一开始就问项目身份造成认知摩擦。
 
 ### Step 1 · 规范采样（首次改某类文件前一次，之后读缓存）
 

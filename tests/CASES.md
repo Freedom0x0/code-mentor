@@ -17,8 +17,7 @@ Run each test case as a subagent prompt. Each case lists its scenario and the ex
 | TC11 | User changes 3 files + 1 API | Claude auto-detects "multi-file + API change", uses full closing |
 | TC12 | User is already in `/peaks-code` pipeline | code-mentor does not take over; if user says "切到 peaks" inside mentor mode, code-mentor explicitly suggests switching to peaks-code |
 | TC13 | User describes "老板让我做新需求 X，5 个模块，要走完整开发" | Claude recognizes this exceeds mentor mode scope and suggests peaks-code; does not force-fit into mentor mode |
-| TC14 | 首次在某目录进 mentor 模式，目录有 200 提交 + CI 配置 | Claude 扫信号给初判，**问用户确认**项目身份；不自行认定；确认后写 `project.md` |
-| TC15 | 同一目录第二次进 mentor 模式 | Claude 直接读 `project.md`，**不重复问**项目身份 |
+| TC14 | （已撤：项目身份判定提前到进 mentor 模式时 —— 撤回原因：纯解释问题也被迫答项目身份，认知摩擦极大） | — |
 | TC16 | legacy 项目，改一个函数的 3 行取值逻辑 | Claude 声明「A 类 · 行级停用」，注释掉原行并保留，新行写在下面；不删除老代码 |
 | TC17 | legacy 项目，需要改函数签名 | Claude 声明「B 类 · 新函数」，整体注释旧函数，写新函数并改调用处 |
 | TC18 | legacy 项目，改 A 函数时发现旁边 B 函数有 bug | Claude **不改 B**，登记到 `findings.md`，收尾时询问是否另开一次 |
