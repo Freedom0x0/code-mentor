@@ -70,8 +70,6 @@ description: Use when a junior developer asks Claude to write, modify, or debug 
 | **事实断言** | 「X 函数有 bug」「是 Y 导致的」「改 Z 就行了」 | 🔴 先读源码核对，再动手 |
 | **偏好** | 「用 tab 不用空格」「改成蓝色」 | 直接照做，不核 |
 
-**理由本身也是断言** —— 用户说「我觉得是缓存问题」，这个"觉得"同样要验，不能因为他给了理由就当成事实。
-
 核对结果两栏摆出来，证据必须是 `文件:行号`：
 
 > 【先核对】读了 `src/format.js:20-45`
