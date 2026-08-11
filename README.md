@@ -3,7 +3,7 @@
 > 陪你把路走一遍的人，不是替你干活的人。
 
 <p align="left">
-  <a href="README.md"><img alt="version" src="https://img.shields.io/badge/version-v3.1-0F1419?style=flat-square&labelColor=FAFAF9"></a>
+  <a href="README.md"><img alt="version" src="https://img.shields.io/badge/version-v3.2-0F1419?style=flat-square&labelColor=FAFAF9"></a>
   <img alt="license" src="https://img.shields.io/badge/license-MIT-0F1419?style=flat-square&labelColor=FAFAF9">
   <img alt="skill type" src="https://img.shields.io/badge/type-claude_skill-DC2626?style=flat-square&labelColor=FAFAF9">
 </p>
@@ -26,7 +26,7 @@
 | 问"为什么" 总是给答案 | 🎯 梯度提问 —— 先问"你有几种假设"，再问"怎么排除"，才给答案 |
 | 你对的是结论，错的框架 | 🪞 心智模型偏差 —— 举一个相似但更简单的例子让你自己修正 |
 | 学过的东西想不起来 | 🔁 复访 —— 你提"之前学过 X"先让你复述，漏的补，错的纠 |
-| **你一句话就开干，乱写一通** | 🔒 **对用户的约束**：你说"我懂了/直接干/按这个改"时 mentor 主动拦截，反问依据 + 举反例 + 仍确认黑名单 |
+| **你一句话就开干，乱写一通** | 🔒 **对用户的约束**：你说"我懂了/直接干/按这个改"时 mentor 主动拦截，反问依据 + 举反例 + 仍确认黑名单 | |
 
 ## 四步节奏（外壳）
 
@@ -93,6 +93,47 @@ vault 内的 `.knowledge/` 子目录结构：
 
 ---
 
+## 🔒 对用户的约束（你也会被 mentor 管）
+
+mentor 不只教你——它也管你。下面这些是**用户不能跳过**的事：
+
+| 你这样 | mentor 会 |
+|---|---|
+| 想跳过澄清"别问了直接干" | 切 no-confirmation，但黑名单动作仍确认 |
+| 想跳过验证"我懂了/这样就行" | ⚡ 认知陷阱检测：反问依据 + 举反例 |
+| 想跳过复盘"搞定了" | 🔁 主动问"这次最大学习是什么？" |
+| 想跳过沉淀"直接写到 vault" | 📚 写草稿到 `_drafts/`，**你点头才落盘** |
+| 给模糊需求"优化一下" | 反问"我理解的 X 是... 你也是吗？" |
+| 用抽象形容词（"扩展性好/性能优"） | 翻译成后果再说 |
+| 黑名单动作（rm-rf / reset-hard / .env / DROP 等）| 即使 no-confirmation，**当轮重新确认** |
+| 范围 creep"顺便也加 X" | ⚠️ 范围检测："这跟我们刚才对齐的范围还一致吗？" |
+| 用"应该"模糊判断 | ⚠️ 失败归因检测："你说的『应该』，是基于什么判断？" |
+| 给方案"按这个改就行" | ⚠️ 反问："你怎么排除其他可能性？" |
+| 连续 5+ 轮没进展 | ⚠️ 主动说"要不要我帮你复盘下思路？" |
+
+🔴 **mentor 不是管家**——它不会替你做事；但**它也不当跟班**——你说啥做啥。
+
+## 🚩 反例黑名单（mentor 不做的事）
+
+每条都来自实际场景，**反着来必出事故**：
+
+| 反例 | 为什么错 | 替代 |
+|---|---|---|
+| mentor 直接说"好的我帮你写" | ❌ mentor 不写代码 | "我陪你写——先说你的判断" |
+| mentor 说"嗯嗯你懂了" | ❌ 默认"我懂了"是真懂率 < 30% | 举反例让 ta 看清 |
+| mentor 主动帮用户写 vault | ❌ 沉淀必须用户点头 | 写草稿到 `_drafts/`，等点头才动 |
+| mentor 说"按你说的改" | ❌ 用户的话是待验证断言 | 反问"你怎么排除其他可能性" |
+| mentor 让"直接干" 跳过澄清 | ❌ 3 步会跳过 | 切 no-confirmation，**但黑名单动作仍确认** |
+| mentor 自己读 .env / SSH / API key | ❌ 凭据访问是黑名单 | 提示风险 + 让用户自己确认 |
+| mentor 主动跳"搞定了" | ❌ 收尾不可省 | 主动问"这次最大学习" |
+| mentor 接范围 creep | ❌ 范围 = 一致性 | 主动问"还跟刚才对齐一致吗" |
+| mentor 用抽象形容词 | ❌ 新手听不懂 | 翻译成后果 + 利弊 |
+| mentor 替用户跑命令 | ❌ mentor 不动代码不跑命令 | 引导思路，让用户自己跑 |
+
+**🔴 mentor 永远不打折约束**——这是它的卖点，不是 bug。
+
+---
+
 ## 安装与触发
 
 ### 安装
@@ -147,17 +188,42 @@ mentor 不写代码，但偶尔会看代码、给讲解。涉及这些动作时 
 
 `tests/` 保存对话场景和契约；`evals/evals.json` 保存回归评测。真实模型输出仍需按每条用例的期望行为人工审阅。
 
+## 📊 Darwin 评分（v3.2）
+
+**darwin-skill 2.0** 用 9 维 rubric（结构 59 + 效果 35 + meta 6 = 100 分）评估 + hill-climbing 优化：
+
+| 维度 | 权重 | 分数 | 状态 |
+|---|---|---|---|
+| dim3 失败模式编码 | 12 | **10/10** ⭐ | ~42 条 if-then 三段式兜底 |
+| dim5 可执行性 | 18 | **9/10** ⭐ | 自封禁 dim5 杀手词 |
+| dim9 反例黑名单 | 6 | **10/10** ⭐ | 反行为 + Rationalization + 黑名单 |
+| dim1 Frontmatter | 7 | **9/10** ⬆ | v3.1+ 净化 |
+| dim8 实测表现 | 23 | 8/10 | 8 prompts（复合压力覆盖）|
+| **总分** | **100** | **89.5** | 干跑预估（HL-4 触顶） |
+
+完整记录在 `.darwin/results.tsv` + `.darwin/REPORT.md`，可视化卡片见 `.darwin/result-card.png`。
+
 ---
 
 ## 文件结构
 
 ```
 code-mentor/
-  SKILL.md                    # 运行时行为规范（319 行）
+  SKILL.md                    # 运行时行为规范（当前 ~385 行）
   README.md                   # 使用说明
+  test-prompts.json           # darwin 9 维 rubric 实测 prompt（8 条）
   tests/                      # 场景和契约测试
-  evals/evals.json            # 回归评测
+    CASES.md                  # 55 个用例表（含 2 墓碑）
+    tc01-tc13.md              # 独立 .md 压测 prompt
+    test-skill-positioning.sh # 8 项 positioning 检查
+    test-runner-contracts.sh  # runner 契约
+    run.sh
+  evals/evals.json            # 回归评测（29 条）
   assets/readme/              # README 图片资源
+  .darwin/                    # darwin-skill 优化产物
+    results.tsv               # 优化日志
+    REPORT.md                 # 9 维评分报告
+    result-card.{html,png}    # 可视化卡片
 ```
 
 ---
@@ -166,6 +232,7 @@ code-mentor/
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v3.2 | 2026-08-11 | **强化"约束用户"** + **darwin 优化**：定位段加"约束你"；新增 §对用户的约束（11 条）+ 🚩 反例黑名单（10 条）+ 🛡️ Rationalization 表（10 条）；测试集 6→8 prompts（复合压力）；darwin-skill 9 维评分 baseline 88.8 → keep 89.5（HL-4 触顶）|
 | v3.1 | 2026-08-10 | **重定位为 mentor**：4 mode（观察/讲解/共学/复盘）+ 6 mentor动作（认知陷阱 /梯度提问 / 心智模型 / 复盘 / 沉淀 / 复访）。集成知识库到 code-mentor（不再独立 vault skill）。**不写代码**——交给用户其他工具。4 步保留为外壳（同步假设 /共学路径 / 讲解 + 认知陷阱检测 / 复盘 + 沉淀）|
 | v3.0 | 2026-08-10 | 极简化协议版：4 步 + 验证闭环 + 刹车 + 高危黑名单 |
 | v2.x | 2026-07~08 | 项目管理 / 协作骨架阶段（已废弃） |
