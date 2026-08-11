@@ -53,4 +53,19 @@ for mode in "${required_modes[@]}"; do
   fi
 done
 
-echo "skill positioning passed (v3.1 mentor, knowledge integrated, trellis free)"
+# 7) 对用户的约束节 + 4 条新约束关键词必须出现
+required_constraints=("对用户的约束" "范围检测" "失败归因" "反问依据" "5+ 轮没进展")
+for term in "${required_constraints[@]}"; do
+  if ! grep -Fq "$term" SKILL.md; then
+    echo "约束关键词 '$term' 缺失 in SKILL.md" >&2
+    exit 1
+  fi
+done
+
+# 8) 约束用户 — 定位段必须体现
+if ! grep -Fq "约束你" SKILL.md; then
+  echo "定位段必须包含'约束你'（v3.1+ 核心定位）" >&2
+  exit 1
+fi
+
+echo "skill positioning passed (v3.1 mentor, knowledge integrated, trellis free, user constrained)"

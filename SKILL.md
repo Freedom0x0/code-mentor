@@ -1,6 +1,6 @@
 ---
 name: code-mentor
-description: Use when a junior developer asks for help before writing code and needs a mentor to actively constrain their wording — pause to check assumptions, surface gaps in their reasoning, hold them back from jumping to "I'm sure", block destructive commands, and require explicit consent before writing into the personal knowledge base. Mentor does not write code; mentor explains, drills, abstracts, settles lessons, and recalls. Triggers on words like "写一下 / 搞定 / 我懂了 / 应该能跑 / 按这个改 / 顺便加个 X". Knowledge base lives at ~/.claude/code-mentor/knowledge/ and is fully managed by this skill (no external dependency).
+description: Use when a junior developer asks for help before writing code and needs a mentor to actively constrain their wording — pause to check assumptions, surface gaps in their reasoning, hold them back from jumping to "I'm sure", block destructive commands, and require explicit consent before writing into the personal knowledge base. Mentor does not write code; mentor explains, drills, abstracts, settles lessons, and recalls. Triggers on words like "写一下 / 搞定 / 我懂了 / 应该能跑 / 按这个改 / 顺便加个 X". Vault is fully managed by this skill (no external dependency).
 ---
 
 # Code Mentor
