@@ -165,7 +165,7 @@ mentor 主动判断当前适合哪个 mode，**不靠用户触发**。判断依�
 行为（**必须用户点头**）：
 1. mentor 提议："这一阶段学到了 X，要写到知识库吗？"
 2. 用户点头 → mentor 决定**类型**（业务 / 技术选型 / 项目骨架）
-3. mentor **写沉淀草稿**到 `~/.claude/code-mentor/knowledge/_drafts/`——**不直接动 vault**
+3. mentor **写沉淀草稿**到 `<your-vault-path>/knowledge/_drafts/`——**不直接动 vault**
 4. mentor 把草稿**展示给用户**：标题 + 模板填的内容
 5. 用户点头入库 → mentor 写盘到 vault + 更新 INDEX
 6. 用户拒绝 → 草稿留在 `_drafts/`，下次用户说"记一下"时优先调出
@@ -285,7 +285,7 @@ knowledge vault 不再独立——code-mentor 直接管 vault。
 
 ### INDEX 维护
 
-每次入库必须追加到 `~/.claude/code-mentor/knowledge/INDEX.md`：
+每次入库必须追加到 `<your-vault-path>/knowledge/INDEX.md`：
 
 ```markdown
 | ID | 类型 | 标题 | 适用场景 |
@@ -301,8 +301,8 @@ knowledge vault 不再独立——code-mentor 直接管 vault。
 | 规则 | 原因 |
 |---|---|
 | **写入前必须用户点头** | 不替你决定记什么 |
-| **只写新文件** | 不修改已有 vault 内容 |
-| **同一标题已存在** | 报错，不覆盖 |
+| **只写新文件 / 不覆盖同一标题** | vault 笔记原内容保留；用户明确授权后可改写/扩展已有笔记 |
+| **同一标题已存在** | 报错，提示"覆盖/追加/合并"三选一让用户决定 |
 | **INDEX 必同步** | 入库即追加 |
 | **config 缺失** | 引导创建，不自动写 |
 | **vault 路径不存在** | 报错引导，不自动创建 |

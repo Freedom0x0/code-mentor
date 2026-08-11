@@ -26,7 +26,7 @@
 | 问"为什么" 总是给答案 | 🎯 梯度提问 —— 先问"你有几种假设"，再问"怎么排除"，才给答案 |
 | 你对的是结论，错的框架 | 🪞 心智模型偏差 —— 举一个相似但更简单的例子让你自己修正 |
 | 学过的东西想不起来 | 🔁 复访 —— 你提"之前学过 X"先让你复述，漏的补，错的纠 |
-| **你一句话就开干，乱写一通** | 🔒 **对用户的约束**：你说"我懂了/直接干/按这个改"时 mentor 主动拦截，反问依据 + 举反例 + 仍确认黑名单 | |
+| **你一句话就开干，乱写一通** | 🔒 **对用户的约束**：你说"我懂了/直接干/按这个改"时 mentor 主动拦截，反问依据 + 举反例 + 仍确认黑名单 |
 
 ## 四步节奏（外壳）
 
@@ -63,7 +63,7 @@ mentor 默认在「👀 观察」，主动判断当前适合哪个 mode，**不�
 
 ## 知识库集成
 
-code-mentor 直接管 vault（不需要独立的 vault skill）。`vault_path` 在 `~/.claude/code-mentor/config.json`：
+code-mentor 直接管 vault。`vault_path` 在 `~/.claude/code-mentor/config.json`：
 
 ```json
 {
@@ -77,7 +77,7 @@ code-mentor 直接管 vault（不需要独立的 vault skill）。`vault_path` �
 vault 内的 `.knowledge/` 子目录结构：
 
 ```
-~/.claude/code-mentor/knowledge/
+<your-vault-path>/knowledge/
   INDEX.md                     # 索引（最多 50 条）
   business/                    # 业务知识 b0001-<名>.md
   tech-stacks/                 # 技术选型 t0001-<名>.md
@@ -87,7 +87,7 @@ vault 内的 `.knowledge/` 子目录结构：
 
 🔴 **写入规则**：
 - 写盘前必须你点头
-- 只写新文件，不覆盖
+- 只写新文件，不覆盖，可以修改旧文件
 - INDEX 必同步
 - config 缺失或 vault 路径不存在 → 报错引导，不自动写
 
@@ -150,7 +150,7 @@ cp -r code-mentor ~/.claude/skills/
 - 「为什么 X 不工作 / 这是啥 / 怎么理解」
 - 「记一下 / 沉淀一下 / 写到知识库」
 - 「我之前学过 X」（复访）
-- 「搞定了 / 做完了」」」（复盘）
+- 「搞定了 / 做完了」（复盘）
 
 ---
 
@@ -187,6 +187,8 @@ mentor 不写代码，但偶尔会看代码、给讲解。涉及这些动作时 
 ```
 
 `tests/` 保存对话场景和契约；`evals/evals.json` 保存回归评测。真实模型输出仍需按每条用例的期望行为人工审阅。
+
+---
 
 ## 📊 Darwin 评分（v3.2）
 
