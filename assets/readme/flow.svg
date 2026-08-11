@@ -1,70 +1,86 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="240" viewBox="0 0 1200 240" role="img" aria-labelledby="flow-title" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">
-  <title id="flow-title">code-mentor 4 步节奏</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="240" viewBox="0 0 1200 240" role="img" aria-labelledby="flow-title"
+     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <title id="flow-title">code-mentor 4 步外壳（v3.1：mentor 不写代码）</title>
+  <desc id="flow-desc">v3.1：外壳是同步假设 → 共学路径 → 讲解 + 认知陷阱检测 → 复盘 + 沉淀。mentor 在每一步都不写代码，写代码是用户的活。</desc>
 
   <rect width="1200" height="240" fill="#FAFAF9"/>
 
-  <text x="64" y="48" font-size="28" font-weight="600" fill="#0F1419">4 步节奏，每步有 STOP</text>
-  <text x="64" y="76" font-size="15" fill="#6E7681">未通过对应检查不进入下一步</text>
+  <!-- header -->
+  <text x="64" y="50" font-size="28" font-weight="700" fill="#0F1419">4 步外壳，mentor 不写代码</text>
+  <text x="64" y="78" font-size="14" fill="#6E7681">同步假设 → 共学路径 → 讲解 + 认知陷阱 → 复盘 + 沉淀</text>
 
-  <!-- 4 cards -->
+  <!-- 4 cards row -->
   <g transform="translate(64 110)">
-    <!-- Step 1: Clarify -->
+
+    <!-- ===== Step 1: Clarify ===== -->
     <g transform="translate(0 0)">
-      <rect width="252" height="100" rx="8" fill="#FFFFFF" stroke="#1F2328" stroke-width="1.5"/>
-      <text x="20" y="32" font-size="14" font-weight="600" fill="#6E7681" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace">1 · CLARIFY</text>
-      <text x="20" y="60" font-size="20" font-weight="600" fill="#0F1419">澄清</text>
-      <text x="20" y="84" font-size="13" fill="#1F2328">问 3 个问题：任务/标准/文件</text>
+      <rect width="248" height="100" rx="10" fill="#FFFFFF" stroke="#1F2328" stroke-width="1.5"/>
+      <text x="20" y="32" font-size="13" font-weight="700" fill="#6E7681"
+            font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
+            letter-spacing="2">1 · CLARIFY</text>
+      <text x="20" y="60" font-size="22" font-weight="700" fill="#0F1419">同步假设</text>
+      <text x="20" y="84" font-size="13" fill="#1F2328">"我理解的 X 是...你也是吗？"</text>
     </g>
 
     <!-- arrow -->
-    <g transform="translate(252 50)">
-      <line x1="6" y1="0" x2="32" y2="0" stroke="#1F2328" stroke-width="1.5"/>
-      <polyline points="28,-4 32,0 28,4" fill="none" stroke="#1F2328" stroke-width="1.5"/>
+    <g transform="translate(248 50)">
+      <line x1="6" y1="0" x2="36" y2="0" stroke="#1F2328" stroke-width="1.5"/>
+      <polyline points="30,-5 36,0 30,5" fill="none" stroke="#1F2328" stroke-width="1.5"/>
     </g>
 
-    <!-- Step 2: Align -->
+    <!-- ===== Step 2: Align ===== -->
     <g transform="translate(296 0)">
-      <rect width="252" height="100" rx="8" fill="#FFFFFF" stroke="#1F2328" stroke-width="1.5"/>
-      <text x="20" y="32" font-size="14" font-weight="600" fill="#6E7681" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace">2 · ALIGN</text>
-      <text x="20" y="60" font-size="20" font-weight="600" fill="#0F1419">对齐</text>
-      <text x="20" y="84" font-size="13" fill="#1F2328">复述「完成定义」等你确认</text>
+      <rect width="248" height="100" rx="10" fill="#FFFFFF" stroke="#1F2328" stroke-width="1.5"/>
+      <text x="20" y="32" font-size="13" font-weight="700" fill="#6E7681"
+            font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
+            letter-spacing="2">2 · ALIGN</text>
+      <text x="20" y="60" font-size="22" font-weight="700" fill="#0F1419">共学路径</text>
+      <text x="20" y="84" font-size="13" fill="#1F2328">"我们学 A → B → C"</text>
       <!-- STOP tag -->
-      <g transform="translate(196 12)">
-        <rect width="40" height="20" rx="4" fill="#DC2626"/>
-        <text x="20" y="14" font-size="10" font-weight="700" fill="#FAFAF9" text-anchor="middle" letter-spacing="1">STOP</text>
+      <g transform="translate(190 14)">
+        <rect width="46" height="22" rx="4" fill="#DC2626"/>
+        <text x="23" y="15" font-size="12" font-weight="700" fill="#FAFAF9"
+              text-anchor="middle" letter-spacing="1">STOP</text>
       </g>
     </g>
 
     <!-- arrow -->
-    <g transform="translate(548 50)">
-      <line x1="6" y1="0" x2="32" y2="0" stroke="#1F2328" stroke-width="1.5"/>
-      <polyline points="28,-4 32,0 28,4" fill="none" stroke="#1F2328" stroke-width="1.5"/>
+    <g transform="translate(544 50)">
+      <line x1="6" y1="0" x2="36" y2="0" stroke="#1F2328" stroke-width="1.5"/>
+      <polyline points="30,-5 36,0 30,5" fill="none" stroke="#1F2328" stroke-width="1.5"/>
     </g>
 
-    <!-- Step 3: Execute -->
+    <!-- ===== Step 3: Execute ===== -->
     <g transform="translate(592 0)">
-      <rect width="252" height="100" rx="8" fill="#FFFFFF" stroke="#1F2328" stroke-width="1.5"/>
-      <text x="20" y="32" font-size="14" font-weight="600" fill="#6E7681" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace">3 · EXECUTE</text>
-      <text x="20" y="60" font-size="20" font-weight="600" fill="#0F1419">执行</text>
-      <text x="20" y="84" font-size="13" fill="#1F2328">改前说改什么 + 为什么，等点头</text>
-      <g transform="translate(196 12)">
-        <rect width="40" height="20" rx="4" fill="#DC2626"/>
-        <text x="20" y="14" font-size="10" font-weight="700" fill="#FAFAF9" text-anchor="middle" letter-spacing="1">STOP</text>
+      <rect width="280" height="100" rx="10" fill="#FFFFFF" stroke="#1F2328" stroke-width="1.5"/>
+      <text x="20" y="32" font-size="13" font-weight="700" fill="#6E7681"
+            font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
+            letter-spacing="2">3 · EXECUTE</text>
+      <text x="20" y="60" font-size="22" font-weight="700" fill="#0F1419">讲解</text>
+      <text x="20" y="84" font-size="13" fill="#1F2328">你写代码 · mentor 在旁讲</text>
+      <!-- STOP tag -->
+      <g transform="translate(222 14)">
+        <rect width="46" height="22" rx="4" fill="#DC2626"/>
+        <text x="23" y="15" font-size="12" font-weight="700" fill="#FAFAF9"
+              text-anchor="middle" letter-spacing="1">STOP</text>
       </g>
     </g>
 
     <!-- arrow -->
-    <g transform="translate(844 50)">
-      <line x1="6" y1="0" x2="32" y2="0" stroke="#1F2328" stroke-width="1.5"/>
-      <polyline points="28,-4 32,0 28,4" fill="none" stroke="#1F2328" stroke-width="1.5"/>
+    <g transform="translate(872 50)">
+      <line x1="6" y1="0" x2="36" y2="0" stroke="#1F2328" stroke-width="1.5"/>
+      <polyline points="30,-5 36,0 30,5" fill="none" stroke="#1F2328" stroke-width="1.5"/>
     </g>
 
-    <!-- Step 4: Close -->
-    <g transform="translate(888 0)">
-      <rect width="184" height="100" rx="8" fill="#FFFFFF" stroke="#1F2328" stroke-width="1.5"/>
-      <text x="20" y="32" font-size="14" font-weight="600" fill="#6E7681" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace">4 · CLOSE</text>
-      <text x="20" y="60" font-size="20" font-weight="600" fill="#0F1419">收尾</text>
-      <text x="20" y="84" font-size="13" fill="#1F2328">验证 + 沉淀 + 影响面清单</text>
+    <!-- ===== Step 4: Close ===== -->
+    <g transform="translate(920 0)">
+      <rect width="216" height="100" rx="10" fill="#FFFFFF" stroke="#1F2328" stroke-width="1.5"/>
+      <text x="20" y="32" font-size="13" font-weight="700" fill="#6E7681"
+            font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
+            letter-spacing="2">4 · CLOSE</text>
+      <text x="20" y="60" font-size="22" font-weight="700" fill="#0F1419">复盘+沉淀</text>
+      <text x="20" y="84" font-size="13" fill="#1F2328">最大学习？要不要入库？</text>
     </g>
+
   </g>
 </svg>

@@ -1,0 +1,32 @@
+# Trellis project state（用户机器上的工作流状态，不应进 skill 仓库）
+.trellis/
+.trellis.todo
+
+# Trellis merge union 标记文件（不属于 skill 本身）
+.gitattributes
+
+# 本地 CLI / harness 配置
+.claude/
+.cursor/
+
+# 用户级 agent 协作文件
+AGENTS.md
+GEMINI.md
+CLAUDE.md
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Build / dist（如果以后加）
+dist/
+build/
+*.log
