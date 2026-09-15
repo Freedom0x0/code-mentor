@@ -17,6 +17,15 @@ class Settings(BaseModel):
     retention_days: int = Field(default=30, ge=0)
     excluded_globs: list[str] = Field(default_factory=list)
 
+    # remote (Anthropic Messages API)
+    remote_api_url: str = "https://api.anthropic.com"
+    remote_api_key: str = ""
+    remote_model: str = "claude-3-5-sonnet-20241022"
+
+    # local (Ollama-compatible /api/chat)
+    local_api_url: str = "http://localhost:11434"
+    local_model: str = "llama3"
+
     @property
     def root(self) -> Path:
         return (self.vault_path / self.knowledge_dir).resolve()

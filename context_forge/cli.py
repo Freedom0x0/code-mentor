@@ -284,7 +284,7 @@ def worker_run(once: bool = typer.Option(False, "--once")) -> None:
     home = Path.home() / ".context-forge"
     settings = load_settings()
     provider = settings.model_provider if settings else "none"
-    gateway = select_gateway(provider)
+    gateway = select_gateway(provider, settings)
     processed = process_one(_store(), _vault(), gateway)
     typer.echo("processed" if processed else "empty")
 
@@ -300,6 +300,41 @@ def install_hook(target: Path = typer.Option(None, "--target"),
         typer.echo(f"removed {result['removed']} hook entries at {result['path']}")
     else:
         typer.echo(f"added {result['added']} hook entries at {result['path']}")
+
+
+@app.command("provider-check")
+def provider_check() -> None:
+    """Ping the configured model provider and report reachability.
+
+    For `remote`: hits Anthropic /v1/messages with a tiny prompt.
+    For `local`: hits Ollama /api/chat with a tiny prompt.
+    Anything else reports the gateway that would be used and exits 0.
+    """
+    from .provider_http import GatewayError
+    settings = load_settings()
+    provider = settings.model_provider if settings else "none"
+    if provider not in {"remote", "local"}:
+        typer.echo(f"provider={provider}; no live check needed")
+        return
+    try:
+        gateway = select_gateway(provider, settings)
+    except GatewayError as exc:
+        typer.echo(f"provider={provider} FAILED to construct: {exc}")
+        raise typer.Exit(code=1)
+    # Minimal call to confirm reachability. The model returns nothing useful
+    # but a 200 response proves auth + network + model name are valid.
+    try:
+        gateway._post(  # type: ignore[attr-defined]
+            url=gateway.api_url,  # type: ignore[attr-defined]
+            headers={"content-type": "application/json"},
+            body={"model": gateway.model,  # type: ignore[attr-defined]
+                  "max_tokens": 8,
+                  "messages": [{"role": "user", "content": "ping"}]},
+        )
+    except GatewayError as exc:
+        typer.echo(f"provider={provider} UNREACHABLE: {exc}")
+        raise typer.Exit(code=1)
+    typer.echo(f"provider={provider} OK ({gateway.name})")
 
 
 @app.command("session-delete")

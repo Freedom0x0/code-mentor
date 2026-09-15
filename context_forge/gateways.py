@@ -65,22 +65,45 @@ class NoOpGateway:
         return RuleExtraction(instruction=knowledge_text.strip()[:400])
 
 
-def select_gateway(provider: str) -> LlmGateway:
+def select_gateway(provider: str, settings=None) -> LlmGateway:
     """Map a settings-level provider name to a gateway implementation.
 
     Recognised names follow the §21 contract: `offline`, `fake`,
     `local`, `remote`. Anything else collapses to `NoOpGateway` so
     unconfigured deployments still let capture / vault / search run.
+
+    When `local` / `remote` is selected, settings must carry credentials;
+    missing credentials raise `GatewayError` so the worker marks the
+    job failed instead of silently dropping it.
     """
+    from .provider_http import GatewayError, build_local, build_remote
+
     name = (provider or "").strip().lower()
     if name == "offline":
         return OfflineGateway()
     if name == "fake":
         return FixtureGateway(_fixture_extraction())
     if name == "local":
-        return NoOpGateway()  # local model client is a deployment choice
+        if settings is None:
+            raise GatewayError("provider=local requires settings")
+        try:
+            return build_local(
+                model=getattr(settings, "local_model", None) or None,
+                api_url=getattr(settings, "local_api_url", None) or None,
+            )
+        except GatewayError:
+            raise
     if name == "remote":
-        return NoOpGateway()  # remote model client is a deployment choice
+        if settings is None:
+            raise GatewayError("provider=remote requires settings")
+        try:
+            return build_remote(
+                api_key=getattr(settings, "remote_api_key", None) or None,
+                model=getattr(settings, "remote_model", None) or None,
+                api_url=getattr(settings, "remote_api_url", None) or None,
+            )
+        except GatewayError:
+            raise
     return NoOpGateway()
 
 

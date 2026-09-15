@@ -781,11 +781,15 @@ worker run --once 是首版的主要测试入口；常驻 worker 只是重复调
 - `forge context --project X [--path Y]`：一次输出命中规则 + 最近 accepted knowledge + 最近 reviews，专为 AI 入口消费。
 - `forge knowledge merge --keep proposed|accepted|<substring>`：处理 `.conflict-<ts>` 副本，用户选哪个就保留哪个。
 - `forge doctor` 集成 retention preview：超期会话数进入信息而非失败状态。
+- 真实 provider 接入：`provider_http.py` 实现 `RemoteGateway`（Anthropic Messages API）和 `LocalGateway`（Ollama `/api/chat`），共享 `HttpGateway` 的 retry / backoff / JSON parse。httpx MockTransport 端到端测试覆盖。
+- `select_gateway("local"|"remote", settings)` 缺凭据时抛 `GatewayError`，由 worker 标 job 失败而非静默 drop。
+- `forge provider-check`：用最小 prompt ping 当前 provider，确认 auth + 网络 + 模型名可用。
+- 34 条 pytest 全过；新增 5 条覆盖 remote/local/重试/凭据校验。
 
 未完成：
 
-- 真实模型 provider（local / remote）：现在有 `offline` / `fake` / `local` / `remote` 四个名字；`local` 和 `remote` 仍映射到 `NoOpGateway` 占位，等用户接入具体客户端。
 - Obsidian 文件 watcher 的 inotify/FSEvents 实时版本；目前仅基于 mtime 轮询。
 - 规则命中的自动 feedback 采集：worker 在 `session_end` 时对未确认的命中写入 `unknown`；用户用 `forge session-outcome` 显式覆盖。
 - MCP server 已通过 5 个工具的端到端测试；stdio transport 文档与 `claude_desktop_config.json` 示例见 `docs/mcp-transport.md`。
+- 真实 provider 接活的端到端验证（当前 `forge provider-check` 只发最小 ping，未带真 transcript）。
 - `forge doctor` 主动调用 `retention_apply`（目前 doctor 只诊断 + 用户手动跑 `forge retention`）。

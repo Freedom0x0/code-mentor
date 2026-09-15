@@ -350,20 +350,135 @@ def test_mcp_server_exposes_all_five_tools(tmp_path: Path) -> None:
 
 
 def test_select_gateway_recognises_named_providers() -> None:
-    """`provider` strings in settings must map without crashing."""
+    """`provider` strings in settings must map without crashing.
+
+    `local` and `remote` require settings; without them the gateway
+    raises `GatewayError` instead of silently dropping the call. The
+    caller must use `provider="none"` (or omit the setting) to get a
+    NoOpGateway.
+    """
+    import pytest
     from context_forge.gateways import (
         FixtureGateway, NoOpGateway, OfflineGateway, select_gateway,
     )
+    from context_forge.provider_http import GatewayError
+
     assert isinstance(select_gateway("offline"), OfflineGateway)
     fake = select_gateway("fake")
     assert isinstance(fake, FixtureGateway)
     assert fake.name == "fixture"
-    local = select_gateway("local")
-    assert isinstance(local, NoOpGateway)
-    remote = select_gateway("remote")
-    assert isinstance(remote, NoOpGateway)
     assert isinstance(select_gateway(""), NoOpGateway)
     assert isinstance(select_gateway("unknown-provider"), NoOpGateway)
+    with pytest.raises(GatewayError):
+        select_gateway("local")
+    with pytest.raises(GatewayError):
+        select_gateway("remote")
+
+
+def test_remote_gateway_parses_anthropic_response(tmp_path: Path) -> None:
+    """Remote gateway must parse Anthropic's content blocks and re-validate."""
+    import httpx
+    from context_forge.domain import Claim, ClaimKind
+    from context_forge.provider_http import RemoteGateway, _CallResult
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "content": [
+                {"type": "text", "text": '{"title": "x", "problem": "p", '
+                 '"outcome": "o", "claims": [{"text": "claim", '
+                 '"kind": "fact", "evidence_ids": ["ev1"]}], '
+                 '"should_save": true, "reason": "ok"}'},
+            ],
+        })
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    gw = RemoteGateway(api_url="https://api.test",
+                       api_key="sk-test", model="claude-3-test")
+    gw._client = client
+    review = gw.extract_review(transcript_path=None,
+                                transcript_hash="h1", session_id="s1")
+    assert review.title == "x"
+    assert review.claims[0].kind is ClaimKind.FACT
+    # Fact must still have evidence_ids after domain re-validation
+    assert review.claims[0].evidence_ids == ["ev1"]
+
+
+def test_remote_gateway_retries_on_5xx(tmp_path: Path) -> None:
+    """A 503 from the API must be retried with exponential backoff."""
+    import httpx
+    from context_forge.provider_http import RemoteGateway
+
+    attempts = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts.append(1)
+        if len(attempts) < 3:
+            return httpx.Response(503, text="busy")
+        return httpx.Response(200, json={"content": [
+            {"type": "text", "text": '{"title": "ok", "should_save": false, '
+             '"reason": "no model"}'},
+        ]})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    gw = RemoteGateway(api_url="https://api.test", api_key="sk", model="m")
+    gw._client = client
+    gw.base_delay = 0.001  # keep the test fast
+    review = gw.extract_review(transcript_path=None,
+                                transcript_hash="h1", session_id="s1")
+    assert review.title == "ok"
+    assert len(attempts) == 3
+
+
+def test_local_gateway_parses_ollama_response(tmp_path: Path) -> None:
+    """Local gateway must accept Ollama's message.content shape."""
+    import httpx
+    from context_forge.provider_http import LocalGateway
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"message": {
+            "content": '{"title": "local", "should_save": true, '
+                       '"reason": "ok", "problem": "p"}',
+        }})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    gw = LocalGateway(api_url="http://localhost:11434", model="llama3")
+    gw._client = client
+    review = gw.extract_review(transcript_path=None,
+                                transcript_hash="h1", session_id="s1")
+    assert review.title == "local"
+    assert review.problem == "p"
+
+
+def test_local_gateway_rejects_unparseable_response(tmp_path: Path) -> None:
+    """When the model returns prose only, the gateway must raise GatewayError."""
+    import httpx
+    import pytest
+    from context_forge.provider_http import GatewayError, LocalGateway
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"message": {"content": "no JSON here"}})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    gw = LocalGateway(api_url="http://localhost:11434", model="m")
+    gw._client = client
+    with pytest.raises(GatewayError):
+        gw.extract_review(transcript_path=None, transcript_hash="h", session_id="s")
+
+
+def test_remote_without_api_key_raises() -> None:
+    """Missing credentials must surface as GatewayError, not NoOpGateway fallback."""
+    import pytest
+    from context_forge.gateways import select_gateway
+    from context_forge.provider_http import GatewayError
+
+    class FakeSettings:
+        model_provider = "remote"
+        remote_api_key = ""
+        remote_model = "claude"
+        remote_api_url = "https://api.test"
+
+    with pytest.raises(GatewayError):
+        select_gateway("remote", FakeSettings())
 
 
 def test_claude_code_hook_ingests_event(tmp_path: Path, monkeypatch) -> None:
