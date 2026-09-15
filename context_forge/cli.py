@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from pathlib import Path
 
 import typer
@@ -335,6 +336,77 @@ def provider_check() -> None:
         typer.echo(f"provider={provider} UNREACHABLE: {exc}")
         raise typer.Exit(code=1)
     typer.echo(f"provider={provider} OK ({gateway.name})")
+
+
+@app.command("review-diff")
+def review_diff(review_id: str) -> None:
+    """Compare the on-disk review file against the recorded draft hash.
+
+    Surfaces how many bytes / lines the user added or removed since the
+    model produced the draft. Used by `forge metrics` for the
+    content-preservation indicator.
+    """
+    import hashlib
+    from difflib import unified_diff
+
+    info = _store().review_user_hash(review_id)
+    if info is None:
+        raise typer.BadParameter(f"review not found: {review_id}")
+    draft_hash, path = info
+    target = Path(path)
+    if not target.exists():
+        typer.echo(f"file missing: {path}")
+        raise typer.Exit(code=1)
+    current_hash = hashlib.sha256(target.read_bytes()).hexdigest()
+    typer.echo(f"draft_hash:  {draft_hash}")
+    typer.echo(f"current:     {current_hash}")
+    if draft_hash == current_hash:
+        typer.echo("unchanged from draft")
+        return
+    typer.echo("changed — show diff")
+    # Diff against an empty stub so the entire file shows as additions
+    stub = target.with_name(target.name + ".draft")
+    if not stub.exists():
+        typer.echo(f"(draft stub missing at {stub}; bytes-only summary)")
+        typer.echo(f"size delta: {target.stat().st_size} bytes (final)")
+        return
+    diff = unified_diff(
+        stub.read_text(encoding="utf-8").splitlines(),
+        target.read_text(encoding="utf-8").splitlines(),
+        fromfile="draft", tofile="current", lineterm="",
+    )
+    for line in diff:
+        typer.echo(line)
+
+
+@app.command("metrics")
+def metrics(days: int = typer.Option(7, "--days", min=1)) -> None:
+    """Aggregate §11 first-slice indicators and rebuild success rate.
+
+    Output is plain text suitable for pasting into a status report.
+    """
+    queue_metrics = _store().metrics()
+    try:
+        index_metrics = _index().rebuild_stats(days=days)
+    except sqlite3.Error as exc:
+        typer.echo(f"index unavailable: {exc}")
+        index_metrics = {}
+    typer.echo(f"sessions: {queue_metrics['sessions']}")
+    typer.echo(f"reviews: {queue_metrics['reviews']} "
+               f"(draft={queue_metrics['reviews_draft']}, "
+               f"approved={queue_metrics['reviews_approved']}, "
+               f"rejected={queue_metrics['reviews_rejected']})")
+    typer.echo(f"jobs: {queue_metrics['jobs']} "
+               f"(succeeded={queue_metrics['jobs_succeeded']}, "
+               f"failed={queue_metrics['jobs_failed']})")
+    typer.echo(f"discovery_rate: {queue_metrics['discovery_rate']:.2%}")
+    typer.echo(f"approval_rate:  {queue_metrics['approval_rate']:.2%}")
+    typer.echo(f"avg_approval_delay: {queue_metrics['avg_approval_delay_seconds']:.1f}s")
+    for key, value in sorted(index_metrics.items()):
+        if isinstance(value, float):
+            typer.echo(f"{key}: {value:.2%}")
+        else:
+            typer.echo(f"{key}: {value}")
 
 
 @app.command("session-delete")

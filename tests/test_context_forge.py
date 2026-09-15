@@ -1,4 +1,5 @@
 from pathlib import Path
+import hashlib
 import json
 import sys
 
@@ -675,3 +676,68 @@ def test_doctor_reports_old_sessions(tmp_path: Path, monkeypatch) -> None:
     # retention is informational, not an error.
     assert rows["queue"][0] is True
     assert "session(s)" in rows["queue"][1]
+
+
+def test_review_diff_reports_user_edits(tmp_path: Path) -> None:
+    """review-diff must surface byte/line changes vs the model draft."""
+    vault = Vault(tmp_path / "vault")
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("x", encoding="utf-8")
+    store = JobStore(tmp_path / "queue.db")
+    store.enqueue_event(event(transcript))
+    process_one(store, vault, OfflineGateway())
+    review = store.list_reviews()[0]
+    review_path = Path(review["path"])
+    draft_path = review_path.with_name(review_path.name + ".draft")
+    assert draft_path.exists()
+    # User edits the review file
+    review_path.write_text(review_path.read_text(encoding="utf-8")
+                            + "\n\n# user note\n", encoding="utf-8")
+    info = store.review_user_hash(review["id"])
+    assert info is not None
+    draft_hash, path = info
+    assert hashlib.sha256(review_path.read_bytes()).hexdigest() != draft_hash
+    # Use the CliRunner to ensure the CLI path works
+    import context_forge.cli as cli
+    cli._store = lambda: store
+    cli._vault = lambda: vault
+    from typer.testing import CliRunner
+    result = CliRunner().invoke(cli.app, ["review-diff", review["id"]])
+    assert result.exit_code == 0
+    assert "changed" in result.output
+
+
+def test_metrics_aggregate_first_slice_indicators(tmp_path: Path) -> None:
+    """`forge metrics` must surface §11 indicators from the queue + index."""
+    vault = Vault(tmp_path / "vault")
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("hello", encoding="utf-8")
+    store = JobStore(tmp_path / "queue.db")
+    store.enqueue_event(event(transcript))
+    process_one(store, vault, OfflineGateway())
+    review = store.list_reviews()[0]
+    store.set_review_status(review["id"], "approved")
+    metrics = store.metrics()
+    assert metrics["sessions"] == 1
+    assert metrics["reviews"] == 1
+    assert metrics["reviews_approved"] == 1
+    assert metrics["approval_rate"] == 1.0
+    assert metrics["discovery_rate"] == 1.0
+    assert metrics["avg_approval_delay_seconds"] >= 0
+
+
+def test_index_rebuild_records_history(tmp_path: Path) -> None:
+    """Every rebuild must be persisted so metrics can compute success rate."""
+    vault = Vault(tmp_path / "vault")
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("x", encoding="utf-8")
+    store = JobStore(tmp_path / "queue.db")
+    store.enqueue_event(event(transcript))
+    process_one(store, vault, OfflineGateway())
+    index = DocumentIndex(tmp_path / "index.db")
+    index.rebuild(vault.root)
+    index.rebuild(vault.root)
+    stats = index.rebuild_stats(days=7)
+    assert stats["rebuilds_7d"] == 2
+    assert stats["rebuilds_ok_7d"] == 2
+    assert stats["rebuild_success_rate_7d"] == 1.0

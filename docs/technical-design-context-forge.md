@@ -785,6 +785,9 @@ worker run --once 是首版的主要测试入口；常驻 worker 只是重复调
 - `select_gateway("local"|"remote", settings)` 缺凭据时抛 `GatewayError`，由 worker 标 job 失败而非静默 drop。
 - `forge provider-check`：用最小 prompt ping 当前 provider，确认 auth + 网络 + 模型名可用。
 - 34 条 pytest 全过；新增 5 条覆盖 remote/local/重试/凭据校验。
+- §11 指标采集：`reviews.draft_hash` 列记录模型原文；worker 落 `.draft` 副本来支撑 review-diff；`rebuild_history` 表记录每次 index 重建是否成功；`forge metrics` 聚合 discovery_rate / approval_rate / avg_approval_delay / rebuild_success_rate。
+- `forge review-diff <id>`：对比当前文件与模型草稿的 hash，输出 unified diff。
+- 37 条 pytest 全过；新增 3 条覆盖 review-diff / metrics / rebuild_history。
 
 未完成：
 

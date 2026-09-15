@@ -41,7 +41,7 @@ class JobStore:
         CREATE TABLE IF NOT EXISTS reviews (
           id TEXT PRIMARY KEY, session_id TEXT NOT NULL, project TEXT NOT NULL,
           path TEXT NOT NULL UNIQUE, status TEXT NOT NULL, content_hash TEXT NOT NULL,
-          created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+          draft_hash TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS rule_feedback (
           id INTEGER PRIMARY KEY AUTOINCREMENT, rule_id TEXT NOT NULL,
@@ -55,6 +55,18 @@ class JobStore:
         );
         """)
         self.db.commit()
+        # Migrations for tables created before newer columns were added.
+        self._migrate()
+
+    def _migrate(self) -> None:
+        cur = self.db.execute("PRAGMA table_info(reviews)")
+        columns = {row[1] for row in cur.fetchall()}
+        if "draft_hash" not in columns:
+            try:
+                self.db.execute("ALTER TABLE reviews ADD COLUMN draft_hash TEXT")
+                self.db.commit()
+            except sqlite3.Error:
+                pass
 
     def enqueue_event(self, event: SessionEvent) -> bool:
         payload = event.model_dump_json()
@@ -111,13 +123,25 @@ class JobStore:
     def list_jobs(self) -> list[sqlite3.Row]:
         return list(self.db.execute("SELECT * FROM jobs ORDER BY created_at DESC"))
 
-    def register_review(self, review_id: str, session_id: str, project: str, path: Path, content_hash: str) -> None:
+    def register_review(self, review_id: str, session_id: str, project: str,
+                         path: Path, content_hash: str,
+                         draft_hash: str | None = None) -> None:
         now = _now()
         with self.db:
             self.db.execute(
-                "INSERT OR IGNORE INTO reviews VALUES (?, ?, ?, ?, 'draft', ?, ?, ?)",
-                (review_id, session_id, project, str(path), content_hash, now, now),
+                "INSERT OR IGNORE INTO reviews VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?)",
+                (review_id, session_id, project, str(path), content_hash,
+                 draft_hash or content_hash, now, now),
             )
+
+    def review_user_hash(self, review_id: str) -> tuple[str, str] | None:
+        """Return `(draft_hash, current_path)` for a review, or None."""
+        row = self.db.execute(
+            "SELECT draft_hash, path FROM reviews WHERE id=?", (review_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return (row["draft_hash"] or "", row["path"])
 
     def list_reviews(self, status: str = "draft") -> list[sqlite3.Row]:
         return list(self.db.execute("SELECT * FROM reviews WHERE status=? ORDER BY created_at DESC", (status,)))
@@ -246,3 +270,54 @@ class JobStore:
         for session_id in targets:
             self.delete_session(session_id)
         return targets
+
+    def metrics(self) -> dict[str, int | float]:
+        """Aggregate the §11 first-slice indicators.
+
+        Returns a flat dict suitable for `forge metrics` output.
+        """
+        sessions = self.db.execute("SELECT COUNT(*) AS n FROM sessions").fetchone()["n"]
+        reviews_total = self.db.execute("SELECT COUNT(*) AS n FROM reviews").fetchone()["n"]
+        reviews_draft = self.db.execute(
+            "SELECT COUNT(*) AS n FROM reviews WHERE status='draft'"
+        ).fetchone()["n"]
+        reviews_approved = self.db.execute(
+            "SELECT COUNT(*) AS n FROM reviews WHERE status='approved'"
+        ).fetchone()["n"]
+        reviews_rejected = self.db.execute(
+            "SELECT COUNT(*) AS n FROM reviews WHERE status='rejected'"
+        ).fetchone()["n"]
+        jobs_total = self.db.execute("SELECT COUNT(*) AS n FROM jobs").fetchone()["n"]
+        jobs_succeeded = self.db.execute(
+            "SELECT COUNT(*) AS n FROM jobs WHERE status='succeeded'"
+        ).fetchone()["n"]
+        jobs_failed = self.db.execute(
+            "SELECT COUNT(*) AS n FROM jobs WHERE status='failed'"
+        ).fetchone()["n"]
+        # Approval latency: avg(updated_at - created_at) in seconds for approved reviews
+        rows = self.db.execute(
+            "SELECT created_at, updated_at FROM reviews WHERE status='approved'"
+        ).fetchall()
+        deltas: list[float] = []
+        for row in rows:
+            try:
+                a = datetime.fromisoformat(row["created_at"])
+                b = datetime.fromisoformat(row["updated_at"])
+                deltas.append(max(0.0, (b - a).total_seconds()))
+            except ValueError:
+                continue
+        avg_delay = sum(deltas) / len(deltas) if deltas else 0.0
+        return {
+            "sessions": sessions,
+            "reviews": reviews_total,
+            "reviews_draft": reviews_draft,
+            "reviews_approved": reviews_approved,
+            "reviews_rejected": reviews_rejected,
+            "jobs": jobs_total,
+            "jobs_succeeded": jobs_succeeded,
+            "jobs_failed": jobs_failed,
+            "discovery_rate": reviews_total / sessions if sessions else 0.0,
+            "approval_rate": reviews_approved / reviews_total if reviews_total else 0.0,
+            "duplicate_rate": 0.0,  # duplicate events return False without insert
+            "avg_approval_delay_seconds": avg_delay,
+        }

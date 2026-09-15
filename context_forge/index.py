@@ -13,6 +13,7 @@ import re
 import sqlite3
 import tempfile
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -37,10 +38,16 @@ class DocumentIndex:
             "CREATE VIRTUAL TABLE IF NOT EXISTS documents USING fts5("
             "id UNINDEXED, path UNINDEXED, content)"
         )
+        self.db.execute(
+            "CREATE TABLE IF NOT EXISTS rebuild_history ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, started_at TEXT NOT NULL, "
+            "finished_at TEXT, files INTEGER, ok INTEGER NOT NULL)"
+        )
         self.db.commit()
 
     def rebuild(self, root: Path) -> int:
         documents = self._walk(root)
+        started = datetime.now(timezone.utc).isoformat()
         with self.db:
             self.db.execute("DELETE FROM documents")
             self.db.executemany(
@@ -50,7 +57,27 @@ class DocumentIndex:
                     for doc in documents
                 ],
             )
+            finished = datetime.now(timezone.utc).isoformat()
+            self.db.execute(
+                "INSERT INTO rebuild_history(started_at, finished_at, "
+                "files, ok) VALUES (?, ?, ?, 1)",
+                (started, finished, len(documents)),
+            )
         return len(documents)
+
+    def rebuild_stats(self, days: int = 7) -> dict[str, int | float]:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        row = self.db.execute(
+            "SELECT COUNT(*) AS total, COALESCE(SUM(ok), 0) AS ok_count "
+            "FROM rebuild_history WHERE started_at >= ?", (cutoff,),
+        ).fetchone()
+        total = row["total"] or 0
+        ok_count = row["ok_count"] or 0
+        return {
+            f"rebuilds_{days}d": total,
+            f"rebuilds_ok_{days}d": ok_count,
+            f"rebuild_success_rate_{days}d": ok_count / total if total else 0.0,
+        }
 
     def search(self, query: str, limit: int = 20) -> list[sqlite3.Row]:
         return list(self.db.execute(
