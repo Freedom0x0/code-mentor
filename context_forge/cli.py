@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import typer
@@ -52,16 +53,13 @@ def jobs() -> None:
 
 @app.command()
 def doctor() -> None:
-    """Check that the local queue is usable."""
-    store = _store()
-    typer.echo(f"queue: {store.path}")
-    typer.echo(f"jobs: {len(store.list_jobs())}")
-    settings = load_settings()
-    if settings:
-        settings.validate_vault()
-        typer.echo(f"vault: {settings.root}")
-    else:
-        typer.echo("config: not found (using local default vault)")
+    """Run read-only diagnostics for vault, queue, index and provider."""
+    from . import doctor as diag
+    rows = diag.run_all()
+    output, failed = diag.render(rows)
+    typer.echo(output)
+    if failed:
+        raise typer.Exit(code=1)
 
 
 @app.command("scan")
@@ -154,6 +152,33 @@ def knowledge_show(knowledge_id: str) -> None:
     typer.echo(found.read_text(encoding="utf-8"), nl=False)
 
 
+@app.command("knowledge-edit")
+def knowledge_edit(knowledge_id: str, editor: str = typer.Option("", "--editor")) -> None:
+    """Open a knowledge proposal in $EDITOR (or the value of --editor).
+
+    Records the file hash before and after the edit; if the hash changed,
+    the FTS index is rebuilt on the next `forge scan`. The file is the
+    source of truth — this command never writes for the user.
+    """
+    import hashlib
+    import subprocess
+
+    found = _vault()._find_knowledge(knowledge_id)
+    if found is None:
+        raise typer.BadParameter(f"knowledge not found: {knowledge_id}")
+    chosen = editor or os.environ.get("EDITOR") or "notepad"
+    before = hashlib.sha256(found.read_bytes()).hexdigest()
+    try:
+        subprocess.run([chosen, str(found)], check=True)
+    except FileNotFoundError as exc:
+        raise typer.BadParameter(f"editor not found: {chosen}") from exc
+    after = hashlib.sha256(found.read_bytes()).hexdigest()
+    if before == after:
+        typer.echo("no changes")
+    else:
+        typer.echo("changed — run forge scan to refresh the index")
+
+
 @app.command("knowledge-accept")
 def knowledge_accept(knowledge_id: str) -> None:
     """Accept a knowledge proposal and move it to knowledge/accepted/."""
@@ -239,6 +264,37 @@ def install_hook(target: Path = typer.Option(None, "--target"),
         typer.echo(f"removed {result['removed']} hook entries at {result['path']}")
     else:
         typer.echo(f"added {result['added']} hook entries at {result['path']}")
+
+
+@app.command("session-delete")
+def session_delete(session_id: str) -> None:
+    """Remove a session and all its derived queue state.
+
+    Does NOT delete files on disk; callers should also clean vault files
+    manually or rely on retention. The FTS index should be rebuilt after.
+    """
+    counts = _store().delete_session(session_id)
+    for table, n in counts.items():
+        typer.echo(f"{table}: {n}")
+
+
+@app.command("session-outcome")
+def session_outcome(session_id: str, outcome: str,
+                    note: str = typer.Option("", "--note")) -> None:
+    """Record an explicit outcome for every rule hit in a session.
+
+    Overrides any auto-recorded `unknown` for that session.
+    """
+    if outcome not in {"helpful", "harmful", "irrelevant", "unknown"}:
+        raise typer.BadParameter("outcome must be helpful, harmful, irrelevant, or unknown")
+    store = _store()
+    hits = store.hits_for_session(session_id)
+    if not hits:
+        typer.echo(f"no rule hits recorded for {session_id}")
+        return
+    for rule_id in hits:
+        store.add_rule_feedback(rule_id, outcome, note or None, session_id=session_id)
+    typer.echo(f"recorded {outcome} for {len(hits)} rule hit(s)")
 
 
 if __name__ == "__main__":

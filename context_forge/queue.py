@@ -159,3 +159,66 @@ class JobStore:
             "last_seen": row["last_seen"] or "",
             "feedback": {r["outcome"]: r["n"] for r in feedback},
         }
+
+    def hits_for_session(self, session_id: str) -> list[str]:
+        """Return the rule_ids that hit during a given session."""
+        return [row["rule_id"] for row in self.db.execute(
+            "SELECT rule_id FROM rule_hit_events WHERE session_id=?",
+            (session_id,),
+        )]
+
+    def auto_record_feedback_for_session(self, session_id: str) -> int:
+        """For every rule hit tagged with this session, record `unknown` if no
+        explicit feedback has been given. Returns the number of rows inserted.
+        """
+        hits = list(self.db.execute(
+            "SELECT rule_id FROM rule_hit_events WHERE session_id=?",
+            (session_id,),
+        ))
+        if not hits:
+            return 0
+        recorded = 0
+        now = _now()
+        with self.db:
+            for hit in hits:
+                already = self.db.execute(
+                    "SELECT 1 FROM rule_feedback "
+                    "WHERE rule_id=? AND session_id=? LIMIT 1",
+                    (hit["rule_id"], session_id),
+                ).fetchone()
+                if already:
+                    continue
+                self.db.execute(
+                    "INSERT INTO rule_feedback(rule_id, session_id, outcome, "
+                    "note, created_at) VALUES (?, ?, ?, ?, ?)",
+                    (hit["rule_id"], session_id, "unknown",
+                     "auto: session ended without explicit feedback", now),
+                )
+                recorded += 1
+        return recorded
+
+    def delete_session(self, session_id: str) -> dict[str, int]:
+        """Remove a session and all its derived state from the queue.
+
+        Returns a count of removed rows per table. Index rows are NOT
+        deleted here because they reference files on disk; the caller
+        should rebuild the FTS index after this returns.
+        """
+        counts = {"sessions": 0, "events": 0, "jobs": 0, "reviews": 0,
+                  "rule_feedback": 0, "rule_hit_events": 0}
+        with self.db:
+            # sessions / events / reviews / rule_* all carry session_id
+            for table in ("events", "reviews", "rule_feedback", "rule_hit_events"):
+                cur = self.db.execute(
+                    f"DELETE FROM {table} WHERE session_id=?", (session_id,),
+                )
+                counts[table] = cur.rowcount
+            cur = self.db.execute("DELETE FROM sessions WHERE id=?", (session_id,))
+            counts["sessions"] = cur.rowcount
+            # jobs key is `review:{session_id}:...`; delete by prefix
+            cur = self.db.execute(
+                "DELETE FROM jobs WHERE idempotency_key LIKE ?",
+                (f"review:{session_id}:%",),
+            )
+            counts["jobs"] = cur.rowcount
+        return counts

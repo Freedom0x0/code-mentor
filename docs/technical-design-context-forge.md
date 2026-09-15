@@ -764,13 +764,21 @@ worker run --once 是首版的主要测试入口；常驻 worker 只是重复调
 - `forge knowledge list/show/accept` 命令、proposal→accepted 文件迁移。
 - `rule_hit_events` 表与 `forge rule-stats <id>`，CLI `rule-match --record` 持久化命中事件。
 - `forge install-hook [--uninstall]`，幂等写入 `~/.claude/settings.json`，通过 `context_forge_managed` 标记只删除自己装的钩子。
-- 13 条 pytest 在 Python 3.12 环境下全部通过。
+- 13 条 pytest 在 Python 3.12 环境下全部通过；本轮新增 9 条覆盖 doctor/MCP/hook e2e/fact 拒收/session 清理等。
+- `forge doctor` 完整诊断：settings / vault canonicalization / queue stall / FTS 一致性 / provider。
+- `forge knowledge edit <id>` 调 $EDITOR；记录前后 hash，提示 `forge scan`。
+- `forge session-delete <id>` 删除 session/events/jobs/reviews/feedback/hits 全部队列状态。
+- `forge session-outcome <id> --outcome ...` 显式记录命中归因。
+- worker 二次校验 `ReviewExtraction`，对未带 evidence 的 fact 拒收（§24 用例 #4）。
+- `session_end` 自动给未反馈的命中写 `unknown`；session-outcome 不替换而是叠加（事件日志）。
+- `select_gateway` 识别 `offline`/`fake`/`local`/`remote`；`local`/`remote` 是 `NoOpGateway` 占位，等用户接入具体客户端。
+- Claude Code hook 端到端回放：模拟 stdin 注入 SessionEnd，验证入队 + 重复入幂等。
 
 未完成：
 
-- 真实模型 provider（local / remote）：当前只有 `offline` 与 `none`，`local` 与 `remote` 是 `NoOpGateway` 的占位实现。
+- 真实模型 provider（local / remote）：现在有 `offline` / `fake` / `local` / `remote` 四个名字；`local` 和 `remote` 仍映射到 `NoOpGateway` 占位，等用户接入具体客户端。
 - Obsidian 文件 watcher 的 inotify/FSEvents 实时版本；目前仅基于 mtime 轮询。
 - Knowledge proposal 的 `$EDITOR` 打开与冲突副本的处理 CLI。
-- 规则命中的自动 feedback 采集（目前需要 `rule-match --record` 或显式 `rule-feedback`）。
-- MCP server 的端到端运行验证与文档。
-- `forge doctor` 的完整诊断项（vault canonicalization、provider 配置、index 重建、retention 等）。
+- 规则命中的自动 feedback 采集：worker 在 `session_end` 时对未确认的命中写入 `unknown`；用户用 `forge session-outcome` 显式覆盖。
+- MCP server 已通过 5 个工具的端到端测试，缺 stdio transport 文档与 `claude_desktop_config.json` 示例。
+- `forge doctor` 的 retention 检查（`retention_days` 实际清理）。

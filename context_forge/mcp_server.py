@@ -1,9 +1,24 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
-from .cli import _store, _vault
 from .rules import RuleMatcher
+
+
+def _store():
+    from .cli import _store as cli_store
+    return cli_store()
+
+
+def _vault():
+    from .cli import _vault as cli_vault
+    return cli_vault()
+
+
+def _index():
+    from .cli import _index as cli_index
+    return cli_index()
 
 
 def create_server():
@@ -17,7 +32,6 @@ def create_server():
 
     @server.tool()
     def context_forge_search(query: str) -> list[dict[str, str]]:
-        from .cli import _index
         return [dict(row) for row in _index().search(query)]
 
     @server.tool()

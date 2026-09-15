@@ -68,9 +68,47 @@ class NoOpGateway:
 def select_gateway(provider: str) -> LlmGateway:
     """Map a settings-level provider name to a gateway implementation.
 
-    Anything other than `offline` collapses to `NoOpGateway` because the
-    MVP has no model client yet. This keeps the LLM boundary optional.
+    Recognised names follow the §21 contract: `offline`, `fake`,
+    `local`, `remote`. Anything else collapses to `NoOpGateway` so
+    unconfigured deployments still let capture / vault / search run.
     """
-    if provider == "offline":
+    name = (provider or "").strip().lower()
+    if name == "offline":
         return OfflineGateway()
+    if name == "fake":
+        return FixtureGateway(_fixture_extraction())
+    if name == "local":
+        return NoOpGateway()  # local model client is a deployment choice
+    if name == "remote":
+        return NoOpGateway()  # remote model client is a deployment choice
     return NoOpGateway()
+
+
+def _fixture_extraction() -> ReviewExtraction:
+    """Default fixture used when `provider = "fake"`."""
+    return ReviewExtraction(
+        title="fixture session",
+        problem="placeholder problem",
+        outcome="fixture gateway did not run a model",
+        reason="fixture gateway",
+        should_save=False,
+    )
+
+
+class FixtureGateway:
+    """Returns caller-supplied ReviewExtractions.
+
+    Used to verify that the worker honours structured constraints. A
+    fixture that emits a fact claim without `evidence_ids` must fail
+    the job (see §24 case 4).
+    """
+
+    def __init__(self, fixture: ReviewExtraction) -> None:
+        self.fixture = fixture
+        self.name = "fixture"
+
+    def extract_review(self, transcript_path, transcript_hash, session_id):
+        return self.fixture
+
+    def compile_rule(self, knowledge_id, knowledge_text):
+        return RuleExtraction(instruction=knowledge_text.strip()[:400])

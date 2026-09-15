@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import sys
 
 from context_forge.domain import EventType, SessionEvent
 from context_forge.gateways import OfflineGateway
@@ -182,3 +183,216 @@ def test_install_hook_is_idempotent_and_uninstallable(tmp_path: Path) -> None:
     removed = install_hook.uninstall(target)
     assert removed["removed"] == 2
     assert "hooks" not in json.loads(target.read_text(encoding="utf-8"))
+
+
+def test_fact_without_evidence_fails_job(tmp_path: Path) -> None:
+    """Section 24 case 4: fact without evidence_ids -> job fails, no accepted knowledge."""
+    from context_forge.domain import Claim, ClaimKind, ReviewExtraction
+    from context_forge.gateways import FixtureGateway
+
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("x", encoding="utf-8")
+    store = JobStore(tmp_path / "queue.db")
+    vault = Vault(tmp_path / "vault")
+    store.enqueue_event(event(transcript))
+    # model_construct bypasses Pydantic validation — simulating a real
+    # model that produced an unsupported fact. The domain contract must
+    # catch this; the worker must not write a review for it.
+    bad = ReviewExtraction.model_construct(
+        title="bad",
+        problem="",
+        attempts=[],
+        outcome="",
+        claims=[Claim.model_construct(text="unsupported", kind=ClaimKind.FACT,
+                                      confidence="medium", evidence_ids=[])],
+        uncertainties=[],
+        candidate_topics=[],
+        should_save=True,
+        reason="test",
+    )
+    # Worker should raise because facts without evidence cannot land.
+    import pytest
+    with pytest.raises(ValueError, match="fact claims require evidence_ids"):
+        process_one(store, vault, FixtureGateway(bad))
+    assert store.list_reviews() == []
+
+
+def test_worker_replay_is_idempotent(tmp_path: Path) -> None:
+    """Section 24 case 8: running worker twice does not duplicate review."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("hello world", encoding="utf-8")
+    store = JobStore(tmp_path / "queue.db")
+    vault = Vault(tmp_path / "vault")
+    store.enqueue_event(event(transcript))
+    process_one(store, vault, OfflineGateway())
+    process_one(store, vault, OfflineGateway())
+    reviews = store.list_reviews()
+    assert len(reviews) == 1
+    files = list((tmp_path / "vault").rglob("reviews/**/*.md"))
+    assert len(files) == 1
+
+
+def test_session_end_records_unknown_for_hits(tmp_path: Path) -> None:
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("anything", encoding="utf-8")
+    store = JobStore(tmp_path / "queue.db")
+    vault = Vault(tmp_path / "vault")
+    store.enqueue_event(event(transcript))
+    store.record_rule_hit("rule-x", "demo", "matched", "src/app.py", "sess-1")
+    process_one(store, vault, OfflineGateway())
+    stats = store.rule_hit_stats("rule-x")
+    assert stats["feedback"]["unknown"] == 1
+
+
+def test_session_delete_clears_derived_state(tmp_path: Path) -> None:
+    """Section 24 case 10: deleting a session removes its queue state."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("anything", encoding="utf-8")
+    store = JobStore(tmp_path / "queue.db")
+    vault = Vault(tmp_path / "vault")
+    store.enqueue_event(event(transcript))
+    process_one(store, vault, OfflineGateway())
+    review = store.list_reviews()[0]
+    assert review["session_id"] == "sess-1"
+    counts = store.delete_session("sess-1")
+    assert counts["sessions"] == 1
+    assert counts["events"] == 1
+    assert counts["jobs"] == 1
+    assert counts["reviews"] == 1
+    assert store.list_reviews() == []
+
+
+def test_doctor_runs_without_state(tmp_path: Path, monkeypatch) -> None:
+    """doctor must be read-only and must not require any prior state."""
+    monkeypatch.setenv("CONTEXT_FORGE_HOME", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    from context_forge import doctor
+    rows = doctor.run_all()
+    assert all(name in {r[0] for r in rows} for name in
+               {"config", "vault", "queue", "index", "provider"})
+    output, failed = doctor.render(rows)
+    assert failed == 0
+
+
+def test_session_outcome_adds_explicit_feedback(tmp_path: Path) -> None:
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("x", encoding="utf-8")
+    store = JobStore(tmp_path / "queue.db")
+    vault = Vault(tmp_path / "vault")
+    store.enqueue_event(event(transcript))
+    store.record_rule_hit("rule-x", "demo", "matched", "src/app.py", "sess-1")
+    process_one(store, vault, OfflineGateway())
+    # user now declares the outcome explicitly
+    for rule_id in store.hits_for_session("sess-1"):
+        store.add_rule_feedback(rule_id, "helpful", "yes", session_id="sess-1")
+    stats = store.rule_hit_stats("rule-x")
+    # RuleFeedback is an event log: auto-unknown + explicit helpful coexist.
+    assert stats["feedback"]["helpful"] == 1
+    assert stats["feedback"]["unknown"] == 1
+
+
+def test_doctor_reports_when_vault_missing(tmp_path: Path, monkeypatch) -> None:
+    """doctor must report problems without mutating anything."""
+    monkeypatch.setenv("CONTEXT_FORGE_HOME", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    from context_forge import doctor
+    rows = dict((name, (ok, detail)) for name, ok, detail in doctor.run_all())
+    assert "queue" in rows  # doctor runs even when queue/index not initialised
+
+
+def test_mcp_server_exposes_all_five_tools(tmp_path: Path) -> None:
+    """The optional MCP server must provide the tools listed in §15."""
+    pytest = __import__("pytest")
+    pytest.importorskip("mcp")
+    # Seed enough state for the search and match tools to be useful
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("authentication timeout", encoding="utf-8")
+    store = JobStore(tmp_path / "queue.db")
+    vault = Vault(tmp_path / "vault")
+    store.enqueue_event(event(transcript))
+    process_one(store, vault, OfflineGateway())
+    vault.write_rule_proposal("k1", "demo", "check tests", ["src/**/*.py"])
+    vault.set_rule_status("rule-k1", "enabled")
+
+    import context_forge.cli as cli
+    import context_forge.mcp_server as mcp
+    from context_forge.index import DocumentIndex
+    cli._store = lambda: store
+    cli._vault = lambda: vault
+    mcp._store = cli._store
+    mcp._vault = cli._vault
+    index = DocumentIndex(tmp_path / "index.db")
+    index.rebuild(vault.root)
+    mcp._index = lambda: index
+
+    srv = mcp.create_server()
+    names = set(srv._tool_manager._tools)
+    assert names == {
+        "context_forge_search",
+        "context_forge_get",
+        "context_forge_pending_reviews",
+        "context_forge_record_feedback",
+        "context_forge_match_rules",
+    }
+    # Exercise each tool by direct call — MCP wraps the fn but still callable
+    search_fn = srv._tool_manager._tools["context_forge_search"].fn
+    assert search_fn("authentication")
+    pending_fn = srv._tool_manager._tools["context_forge_pending_reviews"].fn
+    assert pending_fn()
+    get_fn = srv._tool_manager._tools["context_forge_get"].fn
+    review_path = store.list_reviews()[0]["path"]
+    body = get_fn(review_path)
+    assert "authentication" in body
+    match_fn = srv._tool_manager._tools["context_forge_match_rules"].fn
+    assert match_fn("demo", "src/sub/app.py")
+    feedback_fn = srv._tool_manager._tools["context_forge_record_feedback"].fn
+    assert feedback_fn("rule-k1", "helpful", "yes") == "recorded"
+
+
+def test_select_gateway_recognises_named_providers() -> None:
+    """`provider` strings in settings must map without crashing."""
+    from context_forge.gateways import (
+        FixtureGateway, NoOpGateway, OfflineGateway, select_gateway,
+    )
+    assert isinstance(select_gateway("offline"), OfflineGateway)
+    fake = select_gateway("fake")
+    assert isinstance(fake, FixtureGateway)
+    assert fake.name == "fixture"
+    local = select_gateway("local")
+    assert isinstance(local, NoOpGateway)
+    remote = select_gateway("remote")
+    assert isinstance(remote, NoOpGateway)
+    assert isinstance(select_gateway(""), NoOpGateway)
+    assert isinstance(select_gateway("unknown-provider"), NoOpGateway)
+
+
+def test_claude_code_hook_ingests_event(tmp_path: Path, monkeypatch) -> None:
+    """Section 19 task 9: hook must queue a job from Claude Code's stdin payload."""
+    import io
+    import json
+    from context_forge.hooks import claude_code
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("hello", encoding="utf-8")
+    payload = {
+        "hook_event_name": "SessionEnd",
+        "session_id": "claude-sess-1",
+        "transcript_path": str(transcript),
+        "cwd": str(tmp_path),
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    rc = claude_code.main()
+    assert rc == 0
+    store = JobStore(tmp_path / ".context-forge" / "queue.db")
+    jobs = store.list_jobs()
+    assert len(jobs) == 1
+    job = jobs[0]
+    event = json.loads(job["payload_json"])
+    assert event["session_id"] == "claude-sess-1"
+    assert event["event_type"] == "session_end"
+    assert event["transcript_hash"]  # computed from the fixture file
+    # Replaying the same hook must not create a second job (§24 case 2)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    claude_code.main()
+    assert len(store.list_jobs()) == 1

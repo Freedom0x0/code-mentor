@@ -137,3 +137,11 @@ class LlmGateway(Protocol):
                        session_id: str) -> ReviewExtraction: ...
 
     def compile_rule(self, knowledge_id: str, knowledge_text: str) -> RuleExtraction: ...
+
+
+class GatewayError(Exception):
+    """Raised when a gateway refuses to produce structured output.
+
+    Used for §24 case 4: fact claims without evidence must fail the job
+    rather than silently land in accepted knowledge.
+    """
