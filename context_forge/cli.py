@@ -379,5 +379,28 @@ def import_transcript(path: Path,
     typer.echo("queued" if queued else "duplicate")
 
 
+@app.command("context")
+def context_cmd(project: str, changed_path: str = typer.Option("", "--path")) -> None:
+    """Compose one context dump for the given project and optional path.
+
+    Combines enabled rules matching the scope with recent accepted
+    knowledge and recent reviews. Output is plain text suitable for
+    pasting into an LLM prompt.
+    """
+    from .context import build_context, render
+    sections = build_context(_vault().root, project,
+                              changed_path or None)
+    typer.echo(render(sections), nl=False)
+
+
+@app.command("knowledge-merge")
+def knowledge_merge(knowledge_id: str,
+                     keep: str = typer.Option(..., "--keep",
+                                               help="proposed | accepted | <suffix>")) -> None:
+    """Resolve a conflict by choosing one of the `.conflict-*` copies."""
+    path = _vault().merge_knowledge(knowledge_id, keep)
+    typer.echo(str(path.relative_to(_vault().root)))
+
+
 if __name__ == "__main__":
     app()

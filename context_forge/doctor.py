@@ -46,7 +46,8 @@ def check_vault_canonical(settings: Settings | None) -> tuple[str, bool, str]:
     return ("vault", True, str(canonical))
 
 
-def check_queue(stalled_hours: int = 24) -> tuple[str, bool, str]:
+def check_queue(stalled_hours: int = 24,
+                retention_days: int | None = None) -> tuple[str, bool, str]:
     path = Path.home() / ".context-forge" / "queue.db"
     if not path.exists():
         return ("queue", True, f"queue not initialised at {path}")
@@ -60,10 +61,19 @@ def check_queue(stalled_hours: int = 24) -> tuple[str, bool, str]:
     for job in jobs:
         if job["status"] == "running" and (job["updated_at"] or "") < cutoff:
             stalled += 1
+    parts = [f"{len(jobs)} job(s)"]
     if stalled:
-        return ("queue", False,
-                f"{stalled} running job(s) stalled > {stalled_hours}h; run forge jobs list")
-    return ("queue", True, f"{len(jobs)} job(s) recorded")
+        parts.append(f"{stalled} stalled > {stalled_hours}h (run forge jobs list)")
+    if retention_days is not None:
+        old = store.retention_preview(retention_days)
+        if old:
+            parts.append(
+                f"{len(old)} session(s) > {retention_days}d "
+                f"(run forge retention --days {retention_days} to clean)"
+            )
+    if stalled:
+        return ("queue", False, "; ".join(parts))
+    return ("queue", True, "; ".join(parts))
 
 
 def check_index(vault_root: Path) -> tuple[str, bool, str]:
@@ -94,13 +104,15 @@ def check_provider(settings: Settings | None) -> tuple[str, bool, str]:
             f"provider={provider}; user-configured credentials required for live calls")
 
 
-def run_all() -> list[tuple[str, bool, str]]:
+def run_all(retention_days: int = 30) -> list[tuple[str, bool, str]]:
     settings = load_settings()
     vault_root = settings.root if settings else Path.home() / ".context-forge" / "vault"
+    if settings and settings.retention_days:
+        retention_days = settings.retention_days
     return [
         check_settings(),
         check_vault_canonical(settings),
-        check_queue(),
+        check_queue(retention_days=retention_days),
         check_index(vault_root),
         check_provider(settings),
     ]

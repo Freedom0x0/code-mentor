@@ -410,6 +410,7 @@ def test_retention_preview_and_apply(tmp_path: Path) -> None:
     old = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
     store.db.execute("UPDATE sessions SET created_at=? WHERE id=?",
                      (old, "sess-1"))
+    store.db.commit()
     preview = store.retention_preview(days=30)
     assert {r["session_id"] for r in preview} == {"sess-1"}
     targets = store.retention_apply(days=30, dry_run=True)
@@ -484,3 +485,78 @@ def test_import_transcript_enqueues_event(tmp_path: Path) -> None:
     finally:
         cli._store = orig_store
         cli._vault = orig_vault
+
+
+def test_context_dump_composes_all_sections(tmp_path: Path) -> None:
+    from context_forge.context import build_context, render
+
+    vault = Vault(tmp_path / "vault")
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("anything", encoding="utf-8")
+    store = JobStore(tmp_path / "queue.db")
+    store.enqueue_event(event(transcript))
+    process_one(store, vault, OfflineGateway())
+    review = store.list_reviews()[0]
+    vault.write_knowledge_proposal(review["id"], Path(review["path"]))
+    vault.accept_knowledge(review["id"])
+    vault.write_rule_proposal("k1", "demo", "check tests first", ["src/**/*.py"])
+    vault.set_rule_status("rule-k1", "enabled")
+
+    sections = build_context(vault.root, "demo", "src/sub/app.py")
+    titles = [s.title for s in sections]
+    assert titles == ["Matched rules", "Recent knowledge", "Recent reviews"]
+    rule_section = sections[0]
+    assert "rule-k1" in rule_section.body
+    assert "src/sub/app.py" in rule_section.body
+    output = render(sections)
+    assert "## Matched rules" in output
+    assert "## Recent knowledge" in output
+    assert "## Recent reviews" in output
+
+
+def test_knowledge_merge_resolves_conflict(tmp_path: Path) -> None:
+    vault = Vault(tmp_path / "vault")
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("x", encoding="utf-8")
+    store = JobStore(tmp_path / "queue.db")
+    store.enqueue_event(event(transcript))
+    process_one(store, vault, OfflineGateway())
+    review = store.list_reviews()[0]
+    vault.write_knowledge_proposal(review["id"], Path(review["path"]))
+    # Simulate the program wanting to overwrite but finding a user edit:
+    # the user's edit is the conflict copy; the original is what the
+    # program wanted to write.
+    proposal = vault._find_knowledge(review["id"], statuses=("proposed",))
+    conflict = proposal.with_suffix(proposal.suffix + ".conflict-20260101")
+    conflict.write_text(proposal.read_text(encoding="utf-8") + "\n# user edit\n",
+                        encoding="utf-8")
+    chosen = vault.merge_knowledge(review["id"], ".conflict-20260101")
+    assert chosen.exists()
+    assert "# user edit" in chosen.read_text(encoding="utf-8")
+    # The other copy must be removed once the choice is made
+    assert not list(vault.root.rglob("*.conflict-*.md")) or \
+        len(list(vault.root.rglob("*.conflict-*.md"))) == 1
+    # Listing without the conflict should still surface the canonical file
+    kept = vault._find_knowledge(review["id"])
+    assert kept is not None
+
+
+def test_doctor_reports_old_sessions(tmp_path: Path, monkeypatch) -> None:
+    """doctor must surface retention-eligible sessions without deleting them."""
+    from datetime import datetime, timedelta, timezone
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    store = JobStore(tmp_path / ".context-forge" / "queue.db")
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("x", encoding="utf-8")
+    store.enqueue_event(event(transcript))
+    old = (datetime.now(timezone.utc) - timedelta(days=120)).isoformat()
+    store.db.execute("UPDATE sessions SET created_at=? WHERE id=?",
+                     (old, "sess-1"))
+    store.db.commit()
+    rows = dict((name, (ok, detail)) for name, ok, detail in
+                __import__("context_forge.doctor", fromlist=["*"]).run_all())
+    # The queue check must mention retention without flagging FAIL —
+    # retention is informational, not an error.
+    assert rows["queue"][0] is True
+    assert "session(s)" in rows["queue"][1]

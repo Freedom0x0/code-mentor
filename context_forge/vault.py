@@ -95,6 +95,54 @@ class Vault:
                 return path
         return None
 
+    def list_conflicts(self) -> list[Path]:
+        """Return every `.conflict-<ts>` copy anywhere under the vault."""
+        return sorted(self.root.rglob("*.conflict-*.md"))
+
+    def merge_knowledge(self, knowledge_id: str, keep: str) -> Path:
+        """Resolve a conflict by choosing the `--keep` copy as canonical.
+
+        `keep` is `proposed` / `accepted` (matches the on-disk directory
+        `proposals` / `accepted`) or any substring of a candidate path.
+        The chosen file lands at `knowledge/{dir}/{knowledge_id}.md`
+        when `keep` is a known status; otherwise the picked path is
+        preserved. All `.conflict-*` siblings for that id are removed.
+        """
+        candidates = [
+            p for p in self.root.rglob("*")
+            if p.is_file()
+            and (p.name == f"{knowledge_id}.md"
+                 or p.name.startswith(f"{knowledge_id}.md."))
+            and (p.suffix == ".md" or ".md." in p.name)
+        ]
+        if not candidates:
+            raise FileNotFoundError(f"knowledge not found: {knowledge_id}")
+        status_dir = {"proposed": "proposals", "accepted": "accepted"}.get(keep)
+        if status_dir:
+            choice = next(
+                (p for p in candidates if status_dir in p.parts), None,
+            )
+        else:
+            choice = next((p for p in candidates if keep in str(p)), None)
+        if choice is None:
+            raise ValueError(f"no candidate matched --keep={keep}")
+        text = choice.read_text(encoding="utf-8")
+        if status_dir:
+            target = self._safe(f"knowledge/{status_dir}/{knowledge_id}.md")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            text = re.sub(r"(?m)^status:\s*[^\n]+$",
+                          f"status: {keep}", text, count=1)
+            result = self._atomic_write(target, text)
+        else:
+            result = choice
+        for sibling in candidates:
+            if sibling != result and sibling != choice and \
+                    ".conflict-" in sibling.name:
+                sibling.unlink()
+        if choice != result:
+            choice.unlink()
+        return result
+
     def update_with_expected_hash(self, relative: str, content: str,
                                   expected_hash: str) -> Path:
         """Write `content` to `relative` only if the current file's hash matches.
