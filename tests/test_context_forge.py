@@ -741,3 +741,50 @@ def test_index_rebuild_records_history(tmp_path: Path) -> None:
     assert stats["rebuilds_7d"] == 2
     assert stats["rebuilds_ok_7d"] == 2
     assert stats["rebuild_success_rate_7d"] == 1.0
+
+
+def test_session_info_aggregates_related_rows(tmp_path: Path) -> None:
+    """session-info must surface events / jobs / reviews / hits / feedback."""
+    vault = Vault(tmp_path / "vault")
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("x", encoding="utf-8")
+    store = JobStore(tmp_path / "queue.db")
+    store.enqueue_event(event(transcript))
+    process_one(store, vault, OfflineGateway())
+    store.record_rule_hit("rule-x", "demo", "matched", "src/app.py", "sess-1")
+    store.add_rule_feedback("rule-x", "helpful", "yes", session_id="sess-1")
+    info = store.session_info("sess-1")
+    assert info["session"]["id"] == "sess-1"
+    assert info["session"]["project"] == "demo"
+    assert info["events"] == 1
+    assert len(info["jobs"]) == 1
+    assert len(info["reviews"]) == 1
+    assert info["rule_hits"] == 1
+    assert info["rule_feedback"][0]["outcome"] == "helpful"
+
+
+def test_session_info_unknown_id_returns_empty(tmp_path: Path) -> None:
+    store = JobStore(tmp_path / "queue.db")
+    assert store.session_info("nonexistent") == {}
+
+
+def test_rule_list_and_show_round_trip(tmp_path: Path) -> None:
+    """rule-list and rule-show must read vault frontmatter without writes."""
+    vault = Vault(tmp_path / "vault")
+    vault.write_rule_proposal("k1", "demo", "check tests", ["src/**/*.py"])
+    vault.write_rule_proposal("k2", "demo", "use fixtures", [])
+    vault.set_rule_status("rule-k1", "enabled")
+    enabled = vault.list_rules("enabled")
+    proposed = vault.list_rules("proposed")
+    all_rules = vault.list_rules()
+    assert len(enabled) == 1
+    assert "rule-k1" in enabled[0].name
+    assert len(proposed) == 1
+    assert "rule-k2" in proposed[0].name
+    assert len(all_rules) == 2
+    found = vault.read_rule("rule-k1")
+    assert found is not None
+    path, front, body = found
+    assert front["status"] == "enabled"
+    assert "check tests" in body
+    assert vault.read_rule("nonexistent") is None

@@ -271,6 +271,48 @@ class JobStore:
             self.delete_session(session_id)
         return targets
 
+    def session_info(self, session_id: str) -> dict[str, object]:
+        """Return a structured view of one session for debugging.
+
+        Includes counters for events / jobs / reviews / hits / feedback and
+        the current statuses. None if the session is not recorded.
+        """
+        row = self.db.execute(
+            "SELECT id, project, cwd, transcript_path, transcript_hash, "
+            "status, created_at FROM sessions WHERE id=?", (session_id,),
+        ).fetchone()
+        if row is None:
+            return {}
+        events = self.db.execute(
+            "SELECT COUNT(*) AS n FROM events WHERE session_id=?",
+            (session_id,),
+        ).fetchone()["n"]
+        jobs = list(self.db.execute(
+            "SELECT id, status, attempts, last_error FROM jobs "
+            "WHERE idempotency_key LIKE ? ORDER BY created_at",
+            (f"review:{session_id}:%",),
+        ))
+        reviews = list(self.db.execute(
+            "SELECT id, status, content_hash, created_at, updated_at "
+            "FROM reviews WHERE session_id=?", (session_id,),
+        ))
+        hits = self.db.execute(
+            "SELECT COUNT(*) AS n FROM rule_hit_events WHERE session_id=?",
+            (session_id,),
+        ).fetchone()["n"]
+        feedback = list(self.db.execute(
+            "SELECT rule_id, outcome, note, created_at FROM rule_feedback "
+            "WHERE session_id=? ORDER BY created_at", (session_id,),
+        ))
+        return {
+            "session": dict(row),
+            "events": events,
+            "jobs": [dict(r) for r in jobs],
+            "reviews": [dict(r) for r in reviews],
+            "rule_hits": hits,
+            "rule_feedback": [dict(r) for r in feedback],
+        }
+
     def metrics(self) -> dict[str, int | float]:
         """Aggregate the §11 first-slice indicators.
 

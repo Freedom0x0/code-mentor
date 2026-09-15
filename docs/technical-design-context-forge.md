@@ -788,6 +788,8 @@ worker run --once 是首版的主要测试入口；常驻 worker 只是重复调
 - §11 指标采集：`reviews.draft_hash` 列记录模型原文；worker 落 `.draft` 副本来支撑 review-diff；`rebuild_history` 表记录每次 index 重建是否成功；`forge metrics` 聚合 discovery_rate / approval_rate / avg_approval_delay / rebuild_success_rate。
 - `forge review-diff <id>`：对比当前文件与模型草稿的 hash，输出 unified diff。
 - 37 条 pytest 全过；新增 3 条覆盖 review-diff / metrics / rebuild_history。
+- Observability 命令：`forge rule-list [--status]` / `forge rule-show <id>` / `forge session-info <id>`，输出 JSON；`vault.list_rules` / `vault.read_rule` / `JobStore.session_info` 支撑。
+- 40 条 pytest 全过；新增 3 条覆盖 session-info / rule-list / rule-show。
 
 未完成：
 

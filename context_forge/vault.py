@@ -99,6 +99,32 @@ class Vault:
         """Return every `.conflict-<ts>` copy anywhere under the vault."""
         return sorted(self.root.rglob("*.conflict-*.md"))
 
+    def list_rules(self, status: str | None = None) -> list[Path]:
+        """List rule files under `rules/**/*.md`, optionally by status."""
+        results: list[Path] = []
+        for path in sorted(self.root.glob("rules/**/*.md")):
+            if status is None:
+                results.append(path)
+                continue
+            try:
+                front, _ = parse_frontmatter(path.read_text(encoding="utf-8"))
+            except OSError:
+                continue
+            if front.get("status") == status:
+                results.append(path)
+        return results
+
+    def read_rule(self, rule_id: str) -> tuple[Path, dict[str, str], str] | None:
+        """Return `(path, frontmatter, body)` for a single rule, or None."""
+        for path in sorted(self.root.glob(f"rules/**/{rule_id}.md")):
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            front, body = parse_frontmatter(text)
+            return path, front, body
+        return None
+
     def merge_knowledge(self, knowledge_id: str, keep: str) -> Path:
         """Resolve a conflict by choosing the `--keep` copy as canonical.
 

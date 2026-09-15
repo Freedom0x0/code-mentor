@@ -267,6 +267,36 @@ def rule_match(project: str, changed_path: str = "",
         typer.echo(f"{match.rule_id}\t{match.reason}\t{match.path}")
 
 
+@app.command("rule-list")
+def rule_list(status: str = typer.Option("", "--status")) -> None:
+    """List rule files in the vault, optionally filtered by status."""
+    paths = _vault().list_rules(status or None)
+    for path in paths:
+        typer.echo(str(path.relative_to(_vault().root)))
+
+
+@app.command("rule-show")
+def rule_show(rule_id: str) -> None:
+    """Print the content of a single rule."""
+    found = _vault().read_rule(rule_id)
+    if found is None:
+        raise typer.BadParameter(f"rule not found: {rule_id}")
+    path, _front, body = found
+    text = path.read_text(encoding="utf-8")
+    typer.echo(text, nl=False)
+
+
+@app.command("session-info")
+def session_info_cmd(session_id: str) -> None:
+    """Show the full state of a single session for debugging."""
+    import json
+
+    info = _store().session_info(session_id)
+    if not info:
+        raise typer.BadParameter(f"session not found: {session_id}")
+    typer.echo(json.dumps(info, indent=2, ensure_ascii=False))
+
+
 @app.command("rule-stats")
 def rule_stats(rule_id: str) -> None:
     """Show hit and feedback counts for a single rule."""
