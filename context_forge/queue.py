@@ -112,13 +112,41 @@ class JobStore:
             )
             return self.db.execute("SELECT * FROM jobs WHERE id=?", (row["id"],)).fetchone()
 
-    def finish(self, job_id: str, error: str | None = None) -> None:
-        status = "failed" if error else "succeeded"
+    def finish(self, job_id: str, error: str | None = None,
+               max_attempts: int = 3) -> None:
+        """Mark a job as succeeded, failed, or dead_letter.
+
+        Once attempts reach `max_attempts`, the job transitions to
+        `dead_letter` (§16) and stops being reaped from running. Failed
+        jobs below the limit are still eligible for retry via
+        `retry_job` — see `forge jobs retry <id>`.
+        """
+        row = self.db.execute(
+            "SELECT attempts FROM jobs WHERE id=?", (job_id,),
+        ).fetchone()
+        attempts = row["attempts"] if row else 0
+        if error and attempts >= max_attempts:
+            status = "dead_letter"
+        elif error:
+            status = "failed"
+        else:
+            status = "succeeded"
         with self.db:
             self.db.execute(
                 "UPDATE jobs SET status=?, last_error=?, updated_at=? WHERE id=?",
                 (status, error, _now(), job_id),
             )
+
+    def retry_job(self, job_id: str) -> bool:
+        """Reset a failed/dead_letter job back to queued so worker picks it up."""
+        with self.db:
+            cur = self.db.execute(
+                "UPDATE jobs SET status='queued', last_error=NULL, "
+                "attempts=0, available_at=?, updated_at=? "
+                "WHERE id=? AND status IN ('failed', 'dead_letter')",
+                (_now(), _now(), job_id),
+            )
+            return cur.rowcount == 1
 
     def list_jobs(self) -> list[sqlite3.Row]:
         return list(self.db.execute("SELECT * FROM jobs ORDER BY created_at DESC"))
@@ -336,6 +364,9 @@ class JobStore:
         jobs_failed = self.db.execute(
             "SELECT COUNT(*) AS n FROM jobs WHERE status='failed'"
         ).fetchone()["n"]
+        jobs_dead_letter = self.db.execute(
+            "SELECT COUNT(*) AS n FROM jobs WHERE status='dead_letter'"
+        ).fetchone()["n"]
         # Approval latency: avg(updated_at - created_at) in seconds for approved reviews
         rows = self.db.execute(
             "SELECT created_at, updated_at FROM reviews WHERE status='approved'"
@@ -358,6 +389,7 @@ class JobStore:
             "jobs": jobs_total,
             "jobs_succeeded": jobs_succeeded,
             "jobs_failed": jobs_failed,
+            "jobs_dead_letter": jobs_dead_letter,
             "discovery_rate": reviews_total / sessions if sessions else 0.0,
             "approval_rate": reviews_approved / reviews_total if reviews_total else 0.0,
             "duplicate_rate": 0.0,  # duplicate events return False without insert

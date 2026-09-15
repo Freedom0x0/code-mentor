@@ -46,10 +46,24 @@ def capture(event_file: Path) -> None:
 
 
 @app.command("jobs")
-def jobs() -> None:
-    """List queued and completed jobs."""
-    for row in _store().list_jobs():
-        typer.echo(f"{row['id']}\t{row['status']}\tattempts={row['attempts']}")
+def jobs(limit: int = typer.Option(50, "--limit", min=1),
+          status: str = typer.Option("", "--status")) -> None:
+    """List queued, failed, and dead-letter jobs."""
+    rows = _store().list_jobs()
+    for row in rows[:limit]:
+        if status and row["status"] != status:
+            continue
+        typer.echo(f"{row['id']}\t{row['status']}\tattempts={row['attempts']}\t{row['last_error'] or ''}")
+
+
+@app.command("jobs-retry")
+def jobs_retry(job_id: str) -> None:
+    """Reset a failed or dead-letter job back to queued."""
+    if _store().retry_job(job_id):
+        typer.echo(f"requeued {job_id}")
+    else:
+        typer.echo(f"job not found or not in failed/dead_letter: {job_id}")
+        raise typer.Exit(code=1)
 
 
 @app.command()
@@ -439,7 +453,8 @@ def metrics(days: int = typer.Option(7, "--days", min=1)) -> None:
                f"rejected={queue_metrics['reviews_rejected']})")
     typer.echo(f"jobs: {queue_metrics['jobs']} "
                f"(succeeded={queue_metrics['jobs_succeeded']}, "
-               f"failed={queue_metrics['jobs_failed']})")
+               f"failed={queue_metrics['jobs_failed']}, "
+               f"dead_letter={queue_metrics['jobs_dead_letter']})")
     typer.echo(f"discovery_rate: {queue_metrics['discovery_rate']:.2%}")
     typer.echo(f"approval_rate:  {queue_metrics['approval_rate']:.2%}")
     typer.echo(f"avg_approval_delay: {queue_metrics['avg_approval_delay_seconds']:.1f}s")

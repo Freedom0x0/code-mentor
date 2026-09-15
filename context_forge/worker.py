@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import hashlib
 
+from .config import load_settings
 from .domain import EventType, LlmGateway, ReviewDraft, ReviewExtraction, SessionEvent
 from .gateways import NoOpGateway, OfflineGateway, select_gateway
 from .queue import JobStore
@@ -10,7 +11,8 @@ from .vault import Vault
 
 
 def process_one(store: JobStore, vault: Vault,
-                gateway: LlmGateway | None = None) -> bool:
+                gateway: LlmGateway | None = None,
+                max_attempts: int | None = None) -> bool:
     """Process a single queued job; returns True if a job was handled.
 
     When the event is `session_end`, any open rule hits for the same
@@ -21,6 +23,9 @@ def process_one(store: JobStore, vault: Vault,
     if job is None:
         return False
     gw = gateway or NoOpGateway()
+    if max_attempts is None:
+        settings = load_settings()
+        max_attempts = settings.max_attempts if settings else 3
     try:
         event = SessionEvent.model_validate_json(job["payload_json"])
         extraction = gw.extract_review(
@@ -56,10 +61,10 @@ def process_one(store: JobStore, vault: Vault,
             )
         if event.event_type is EventType.SESSION_END:
             store.auto_record_feedback_for_session(event.session_id)
-        store.finish(job["id"])
+        store.finish(job["id"], max_attempts=max_attempts)
     except Exception as exc:
-        store.finish(job["id"], error=f"{type(exc).__name__}: {exc}")
-        raise
+        store.finish(job["id"], error=f"{type(exc).__name__}: {exc}",
+                     max_attempts=max_attempts)
     return True
 
 

@@ -211,11 +211,11 @@ def test_fact_without_evidence_fails_job(tmp_path: Path) -> None:
         should_save=True,
         reason="test",
     )
-    # Worker should raise because facts without evidence cannot land.
-    import pytest
-    with pytest.raises(ValueError, match="fact claims require evidence_ids"):
-        process_one(store, vault, FixtureGateway(bad))
+    process_one(store, vault, FixtureGateway(bad))
     assert store.list_reviews() == []
+    job = store.list_jobs()[0]
+    assert job["status"] == "failed"
+    assert "fact claims require evidence_ids" in (job["last_error"] or "")
 
 
 def test_worker_replay_is_idempotent(tmp_path: Path) -> None:
@@ -839,3 +839,52 @@ def test_validate_accepts_clean_vault(tmp_path: Path) -> None:
     issues = validate.validate_vault(vault.root)
     errors = [i for i in issues if i.severity == "error"]
     assert errors == []
+
+
+def test_failing_job_progresses_to_dead_letter(tmp_path: Path) -> None:
+    """After max_attempts, jobs go to dead_letter (§16) and stop being reaped."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("x", encoding="utf-8")
+    store = JobStore(tmp_path / "queue.db")
+    store.enqueue_event(event(transcript))
+    job = store.list_jobs()[0]
+
+    # attempts already 0; first failure -> failed
+    store.finish(job["id"], error="RuntimeError: x", max_attempts=3)
+    assert store.db.execute(
+        "SELECT status FROM jobs WHERE id=?", (job["id"],),
+    ).fetchone()["status"] == "failed"
+
+    # Force attempts to the limit and re-finish -> dead_letter
+    store.db.execute("UPDATE jobs SET attempts=3 WHERE id=?", (job["id"],))
+    store.db.commit()
+    store.finish(job["id"], error="RuntimeError: y", max_attempts=3)
+    assert store.db.execute(
+        "SELECT status FROM jobs WHERE id=?", (job["id"],),
+    ).fetchone()["status"] == "dead_letter"
+
+    metrics = store.metrics()
+    assert metrics["jobs_dead_letter"] == 1
+    assert metrics["jobs_failed"] == 0
+
+
+def test_retry_job_resets_dead_letter_to_queued(tmp_path: Path) -> None:
+    """`forge jobs retry <id>` resets attempts and re-queues the job."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("x", encoding="utf-8")
+    store = JobStore(tmp_path / "queue.db")
+    store.enqueue_event(event(transcript))
+    job_id = store.list_jobs()[0]["id"]
+    store.db.execute("UPDATE jobs SET attempts=3 WHERE id=?", (job_id,))
+    store.db.commit()
+    store.finish(job_id, error="x", max_attempts=3)
+    assert store.db.execute(
+        "SELECT status FROM jobs WHERE id=?", (job_id,),
+    ).fetchone()["status"] == "dead_letter"
+    assert store.retry_job(job_id) is True
+    row = store.db.execute(
+        "SELECT status, attempts FROM jobs WHERE id=?", (job_id,),
+    ).fetchone()
+    assert row["status"] == "queued"
+    assert row["attempts"] == 0
+    assert store.retry_job("nonexistent-id") is False
