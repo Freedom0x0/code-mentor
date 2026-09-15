@@ -106,15 +106,23 @@ class HttpGateway:
 
     @staticmethod
     def _parse_json_object(text: str) -> dict[str, Any]:
-        """Pull a JSON object out of a model reply, tolerating stray prose."""
-        start = text.find("{")
-        end = text.rfind("}")
-        if start < 0 or end < 0 or end <= start:
-            raise GatewayError(f"model returned no JSON object: {text[:120]}")
-        try:
-            return json.loads(text[start:end + 1])
-        except json.JSONDecodeError as exc:
-            raise GatewayError(f"model JSON parse failed: {exc}") from exc
+        """Extract the first JSON object from a model reply.
+
+        Tolerates surrounding prose and trailing text. Uses
+        `raw_decode` so nested objects do not derail extraction the way
+        `text.find('{')` + `rfind('}')` does.
+        """
+        decoder = json.JSONDecoder()
+        idx = text.find("{")
+        while idx >= 0:
+            try:
+                obj, _end = decoder.raw_decode(text[idx:])
+                if isinstance(obj, dict):
+                    return obj
+            except json.JSONDecodeError:
+                pass
+            idx = text.find("{", idx + 1)
+        raise GatewayError(f"model returned no JSON object: {text[:120]}")
 
     @staticmethod
     def _transcript_excerpt(transcript_path: str | None,
