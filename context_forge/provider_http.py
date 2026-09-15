@@ -222,14 +222,39 @@ class LocalGateway(HttpGateway):
 
 def build_remote(api_key: str | None = None, model: str | None = None,
                  api_url: str | None = None) -> LlmGateway:
-    """Factory honouring environment overrides for the remote gateway."""
-    key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-    url = api_url or os.environ.get("ANTHROPIC_API_URL",
-                                    "https://api.anthropic.com")
-    chosen = model or os.environ.get("ANTHROPIC_MODEL",
-                                    "claude-3-5-sonnet-20241022")
+    """Factory honouring environment overrides for the remote gateway.
+
+    Reads env vars in this order:
+    - key:  `ANTHROPIC_API_KEY` → `ANTHROPIC_AUTH_TOKEN` (Claude Code)
+    - url:  `ANTHROPIC_API_URL` → `ANTHROPIC_BASE_URL` (Claude Code)
+    - model: `ANTHROPIC_MODEL`  → `ANTHROPIC_DEFAULT_SONNET_MODEL`
+                            → `ANTHROPIC_DEFAULT_OPUS_MODEL`
+                            → `ANTHROPIC_DEFAULT_HAIKU_MODEL`
+    """
+    key = (
+        api_key
+        or os.environ.get("ANTHROPIC_API_KEY")
+        or os.environ.get("ANTHROPIC_AUTH_TOKEN")
+        or ""
+    )
+    url = (
+        api_url
+        or os.environ.get("ANTHROPIC_API_URL")
+        or os.environ.get("ANTHROPIC_BASE_URL")
+        or "https://api.anthropic.com"
+    )
+    chosen = (
+        model
+        or os.environ.get("ANTHROPIC_MODEL")
+        or os.environ.get("ANTHROPIC_DEFAULT_SONNET_MODEL")
+        or os.environ.get("ANTHROPIC_DEFAULT_OPUS_MODEL")
+        or os.environ.get("ANTHROPIC_DEFAULT_HAIKU_MODEL")
+        or "claude-3-5-sonnet-20241022"
+    )
     if not key:
-        raise GatewayError("ANTHROPIC_API_KEY not set")
+        raise GatewayError(
+            "ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN not set"
+        )
     return RemoteGateway(api_url=url, api_key=key, model=chosen)
 
 

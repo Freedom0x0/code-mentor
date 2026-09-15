@@ -17,10 +17,12 @@ class Settings(BaseModel):
     retention_days: int = Field(default=30, ge=0)
     excluded_globs: list[str] = Field(default_factory=list)
 
-    # remote (Anthropic Messages API)
-    remote_api_url: str = "https://api.anthropic.com"
+    # remote (Anthropic Messages API) — all three fall back to env vars
+    # set by Claude Code (ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL,
+    # ANTHROPIC_DEFAULT_*_MODEL) so users rarely need to set them.
+    remote_api_url: str = ""
     remote_api_key: str = ""
-    remote_model: str = "claude-3-5-sonnet-20241022"
+    remote_model: str = ""
 
     # local (Ollama-compatible /api/chat)
     local_api_url: str = "http://localhost:11434"

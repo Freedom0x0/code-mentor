@@ -466,11 +466,15 @@ def test_local_gateway_rejects_unparseable_response(tmp_path: Path) -> None:
         gw.extract_review(transcript_path=None, transcript_hash="h", session_id="s")
 
 
-def test_remote_without_api_key_raises() -> None:
+def test_remote_without_api_key_raises(monkeypatch) -> None:
     """Missing credentials must surface as GatewayError, not NoOpGateway fallback."""
     import pytest
     from context_forge.gateways import select_gateway
     from context_forge.provider_http import GatewayError
+
+    # Clear all key-bearing env vars so the test isolates the "no creds" path
+    for var in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"):
+        monkeypatch.delenv(var, raising=False)
 
     class FakeSettings:
         model_provider = "remote"
