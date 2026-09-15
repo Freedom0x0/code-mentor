@@ -1,13 +1,13 @@
 """HTTP-backed LlmGateway implementations.
 
-`RemoteGateway` talks to the Anthropic Messages API; `LocalGateway` talks
-to an Ollama-compatible `/api/chat` endpoint. Both share `HttpGateway`
-which owns HTTP plumbing, retry/backoff and JSON parsing.
+`RemoteGateway` talks to the Anthropic Messages API; `LocalGateway`
+talks to an Ollama-compatible `/api/chat` endpoint. Both share
+`HttpGateway` which owns HTTP plumbing, retry/backoff and JSON parsing.
 
 The provider is pluggable: when the user sets `model_provider = "remote"`
-or `"local"` and supplies credentials, the worker will actually call the
-model. Without credentials the gateway is skipped and the system keeps
-working — capture / vault / search remain usable.
+or `"local"` and supplies credentials, the worker actually calls the
+model. Without credentials the gateway is skipped and the system
+keeps working -- capture / vault / search remain usable.
 """
 
 from __future__ import annotations
@@ -18,29 +18,43 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from .domain import LlmGateway, ReviewExtraction, RuleExtraction
+from .domain import (
+    LlmGateway,
+    RuleExtraction,
+    SessionArtifacts,
+)
 
 
 _PROMPT = (
     "You are reviewing a sanitized Claude Code session transcript. "
-    "Reply with strict JSON only — no prose, no markdown fences — that "
-    "matches this schema:\n"
-    "{{"
-    "\"title\": string, "
-    "\"problem\": string, "
-    "\"attempts\": [{{\"summary\": string, \"result\": string, "
-    "\"evidence\": [string]}}], "
-    "\"outcome\": string, "
-    "\"claims\": [{{\"text\": string, \"kind\": \"fact|inference|open_question\", "
-    "\"confidence\": \"low|medium|high\", \"evidence_ids\": [string]}}], "
-    "\"uncertainties\": [string], "
-    "\"candidate_topics\": [string], "
-    "\"should_save\": boolean, "
-    "\"reason\": string"
+    "Reply with strict JSON only -- no prose, no markdown fences -- "
+    "that matches this schema:\n"
+    "{{\n"
+    '"title": string, '
+    '"problem": string, '
+    '"attempts": [{{"summary": string, "result": string, '
+    '"evidence": [string]}}], '
+    '"outcome": string, '
+    '"claims": [{{"text": string, '
+    '"kind": "fact|inference|open_question", '
+    '"confidence": "low|medium|high", '
+    '"evidence_ids": [string]}}], '
+    '"uncertainties": [string], '
+    '"candidate_topics": [string], '
+    '"should_save": boolean, '
+    '"reason": string, '
+    '"knowledge": {{"id": string, "body": string, '
+    '"sources": [string], '
+    '"confidence": "low|medium|high", '
+    '"topics": [string]}} | null, '
+    '"rule_candidate": {{"instruction": string, "paths": [string]}} | null'
     "}}\n"
     "Facts MUST cite at least one evidence id. Open questions and "
     "inferences can omit evidence. Set should_save=false if the session "
-    "lacks an actionable lesson.\n\n"
+    "lacks an actionable lesson. If should_save=true and you derive a "
+    "reusable lesson, populate `knowledge`; if that lesson would "
+    "generalise into a project rule, populate `rule_candidate` too. "
+    "Skip both fields if no reusable knowledge emerged.\n\n"
     "Transcript (sanitized):\n{transcript}\n"
 )
 
@@ -96,22 +110,14 @@ class HttpGateway:
                 raise GatewayError(
                     f"{response.status_code} {response.text[:200]}"
                 )
-            text = response.text
-            return _CallResult(text=text, attempts=attempt)
+            return _CallResult(text=response.text, attempts=attempt)
         raise GatewayError(f"max attempts exhausted: {last_exc}")
 
     def _sleep_backoff(self, attempt: int) -> None:
-        delay = self.base_delay * (2 ** (attempt - 1))
-        time.sleep(min(delay, 8.0))
+        time.sleep(min(self.base_delay * (2 ** (attempt - 1)), 8.0))
 
     @staticmethod
     def _parse_json_object(text: str) -> dict[str, Any]:
-        """Extract the first JSON object from a model reply.
-
-        Tolerates surrounding prose and trailing text. Uses
-        `raw_decode` so nested objects do not derail extraction the way
-        `text.find('{')` + `rfind('}')` does.
-        """
         decoder = json.JSONDecoder()
         idx = text.find("{")
         while idx >= 0:
@@ -129,27 +135,27 @@ class HttpGateway:
                              transcript_hash: str | None) -> str:
         if not transcript_path:
             return f"(no transcript; hash={transcript_hash or 'unknown'})"
+        from pathlib import Path
         from .transcript import sanitize_transcript
-        sanitized = sanitize_transcript(__import__("pathlib").Path(transcript_path))
+        sanitized = sanitize_transcript(Path(transcript_path))
         body = sanitized.content.strip()
         if len(body) > 8000:
             body = body[:8000] + "\n... (truncated)"
         return body or "(empty)"
 
-    def extract_review(self, transcript_path, transcript_hash, session_id):
+    def extract_session(self, transcript_path, transcript_hash, session_id):
         excerpt = self._transcript_excerpt(transcript_path, transcript_hash)
         prompt = _PROMPT.format(transcript=excerpt)
         reply = self._call_chat(prompt)
         data = self._parse_json_object(reply)
-        # Re-validate via the domain model so any contract drift is caught.
-        return ReviewExtraction.model_validate(data)
+        return SessionArtifacts.model_validate(data)
 
     def compile_rule(self, knowledge_id, knowledge_text):
         prompt = (
-            "Distill the following knowledge into a single-sentence rule "
-            "instruction and a comma-separated list of glob patterns. "
-            "Reply with strict JSON only: "
-            "{\"instruction\": string, \"paths\": [string]}\n\n"
+            "Distill the following knowledge into a single-sentence "
+            "rule instruction and a comma-separated list of glob "
+            "patterns. Reply with strict JSON only: "
+            '{"instruction": string, "paths": [string]}\n\n'
             f"Knowledge id: {knowledge_id}\n{knowledge_text}"
         )
         reply = self._call_chat(prompt)
@@ -164,8 +170,10 @@ class HttpGateway:
 class RemoteGateway(HttpGateway):
     """Anthropic Messages API.
 
-    Requires `remote_api_key` in settings. Falls back to NoOpGateway when
-    absent so unconfigured deployments still run.
+    Reads env vars in this order so users rarely need to set anything:
+    - key: `ANTHROPIC_API_KEY` then `ANTHROPIC_AUTH_TOKEN`
+    - url: `ANTHROPIC_API_URL` then `ANTHROPIC_BASE_URL`
+    - model: `ANTHROPIC_MODEL` then `ANTHROPIC_DEFAULT_{SONNET,OPUS,HAIKU}_MODEL`
     """
 
     name = "remote"
@@ -187,7 +195,7 @@ class RemoteGateway(HttpGateway):
         }
         body = {
             "model": self.model,
-            "max_tokens": 1024,
+            "max_tokens": 2048,
             "messages": [{"role": "user", "content": prompt}],
         }
         result = self._post(self.api_url, headers, body)
@@ -230,15 +238,7 @@ class LocalGateway(HttpGateway):
 
 def build_remote(api_key: str | None = None, model: str | None = None,
                  api_url: str | None = None) -> LlmGateway:
-    """Factory honouring environment overrides for the remote gateway.
-
-    Reads env vars in this order:
-    - key:  `ANTHROPIC_API_KEY` → `ANTHROPIC_AUTH_TOKEN` (Claude Code)
-    - url:  `ANTHROPIC_API_URL` → `ANTHROPIC_BASE_URL` (Claude Code)
-    - model: `ANTHROPIC_MODEL`  → `ANTHROPIC_DEFAULT_SONNET_MODEL`
-                            → `ANTHROPIC_DEFAULT_OPUS_MODEL`
-                            → `ANTHROPIC_DEFAULT_HAIKU_MODEL`
-    """
+    """Factory honouring environment overrides for the remote gateway."""
     key = (
         api_key
         or os.environ.get("ANTHROPIC_API_KEY")

@@ -1,7 +1,15 @@
-from __future__ import annotations
+"""MCP server for Claude Desktop / Claude Code to query the vault.
 
-import hashlib
-from pathlib import Path
+Tools:
+  context_forge_search(query)        full-text over knowledge + rules
+  context_forge_get(path)            read a vault file (path-validated)
+  context_forge_match_rules(...)     explain rule hits for a project
+  context_forge_recent_knowledge(N)  last N auto-published knowledge items
+  context_forge_recent_rules(N)      last N rule candidates (any status)
+  context_forge_record_feedback(...) log helpful/harmful/irrelevant on a rule
+"""
+
+from __future__ import annotations
 
 from .rules import RuleMatcher
 
@@ -22,7 +30,7 @@ def _index():
 
 
 def create_server():
-    """Create the optional MCP server; importing MCP remains a deployment choice."""
+    """Create the optional MCP server; importing MCP is a deployment choice."""
     try:
         from mcp.server.fastmcp import FastMCP
     except ImportError as exc:
@@ -35,10 +43,6 @@ def create_server():
         return [dict(row) for row in _index().search(query)]
 
     @server.tool()
-    def context_forge_pending_reviews() -> list[dict[str, str]]:
-        return [dict(row) for row in _store().list_reviews()]
-
-    @server.tool()
     def context_forge_get(path: str) -> str:
         target = (_vault().root / path).resolve()
         if target != _vault().root and _vault().root not in target.parents:
@@ -46,14 +50,40 @@ def create_server():
         return target.read_text(encoding="utf-8")
 
     @server.tool()
-    def context_forge_match_rules(project: str, changed_path: str = "") -> list[dict[str, str]]:
+    def context_forge_match_rules(project: str,
+                                  changed_path: str = "") -> list[dict[str, str]]:
         return [
-            {"rule_id": match.rule_id, "reason": match.reason, "instruction": match.instruction}
-            for match in RuleMatcher(_vault().root).match(project, changed_path or None)
+            {"rule_id": m.rule_id, "reason": m.reason, "instruction": m.instruction}
+            for m in RuleMatcher(_vault().root).match(project, changed_path or None)
         ]
 
     @server.tool()
-    def context_forge_record_feedback(rule_id: str, outcome: str, note: str = "") -> str:
+    def context_forge_recent_knowledge(limit: int = 5) -> list[dict[str, str]]:
+        v = _vault()
+        out: list[dict[str, str]] = []
+        for path in sorted(v.root.glob("knowledge/accepted/*.md"),
+                          reverse=True)[:limit]:
+            out.append({"path": str(path.relative_to(v.root)),
+                        "name": path.stem})
+        return out
+
+    @server.tool()
+    def context_forge_recent_rules(limit: int = 10,
+                                   status: str = "") -> list[dict[str, str]]:
+        v = _vault()
+        out: list[dict[str, str]] = []
+        for path in sorted(v.root.glob("rules/**/*.md"), reverse=True):
+            if status and f"status: {status}" not in path.read_text(encoding="utf-8"):
+                continue
+            out.append({"path": str(path.relative_to(v.root)),
+                        "name": path.stem})
+            if len(out) >= limit:
+                break
+        return out
+
+    @server.tool()
+    def context_forge_record_feedback(rule_id: str, outcome: str,
+                                      note: str = "") -> str:
         if outcome not in {"helpful", "harmful", "irrelevant", "unknown"}:
             raise ValueError("invalid feedback outcome")
         _store().add_rule_feedback(rule_id, outcome, note or None)

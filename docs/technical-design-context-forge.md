@@ -793,6 +793,16 @@ worker run --once 是首版的主要测试入口；常驻 worker 只是重复调
 - 方案 §16 队列契约：`finish(error=..., max_attempts)` 在 attempts 到 max 时落 dead_letter；`retry_job` 把 failed/dead_letter → queued；`forge jobs --status dead_letter` 列死信；`forge jobs-retry <id>` 救回；metrics 加 `jobs_dead_letter` 计数。
 - 方案 §22 worker 进程：`worker.run_loop(store, vault, gateway, interval_seconds, max_attempts, stop_after)` 持久轮询；SIGTERM 转 KeyboardInterrupt 走同一条 exit path；`forge worker run`（无 --once）走 daemon 模式，`--interval` 覆盖 `poll_interval_seconds`。
 - 47 条 pytest 全过；新增 2 条 daemon 循环测试（stop_after 退出 + gateway 异常不死循环）。
+- **大重构：循环内自动 + 循环外用户增删。** 用户决定所有 approval gate 都去掉，知识/规则由 worker 自动写；用户动作改为文件级。
+  - 新域类型：`SessionArtifacts` 一次模型响应返 `title/problem/attempts/outcome/claims/knowledge/rule_candidate`；`LlmGateway.extract_session` 单方法取代旧 `extract_review`。
+  - `vault.write_draft` / `write_knowledge_auto` / `write_rule_candidate`：worker 一次写三份文件（`_drafts/` + `knowledge/accepted/` + `rules/proposals/status=proposed`）。
+  - `user_owned: true` frontmatter：worker 见到跳过，不覆盖用户手写条目。
+  - 规则永远不 auto-enabled；用户改 frontmatter `status: proposed` → `enabled` 启用。
+  - CLI 从 24 个命令压到 6 个：`init / install-hook / worker run / status / doctor / retention`；MCP 提供 search / get / match_rules / recent_knowledge / recent_rules / record_feedback 给 AI 用。
+  - `forge session-outcome` 仍保留作为用户显式反馈入口（叠加而非替换）。
+  - `RuleMatcher` 修了两 bug：空 paths 时仅在 changed_path 为 None 时入 match；comma-separated `paths: a,b,c` 一行 frontmatter 也正确解析。
+- 21 条 pytest 全过；覆盖新 auto-loop 三文件写、`user_owned` 跳过、规则启用 match、daemon 跑 N 个 job、gateway 异常不死循环。
+- 实测：worker 一次调用 model → 自动写 `_drafts/e2e-1.md` + `knowledge/accepted/react-usestate-default-array.md` + `rules/proposals/rule-react-usestate-default-array.md`；用户 `sed` 改 frontmatter `status: enabled` → RuleMatcher `**/*.tsx` 命中 `src/components/Cart.tsx`。
 
 未完成：
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,20 +16,20 @@ def glob_match(path_str: str, pattern: str) -> bool:
     """Match a path against a glob pattern.
 
     `**` matches zero or more path segments (including none); single `*`
-    matches one segment without separators. Other characters match literally.
+    matches one segment without separators. Other characters match
+    literally.
     """
+    import re
     regex_parts = []
     i = 0
     while i < len(pattern):
         c = pattern[i]
         if c == "*":
             if i + 1 < len(pattern) and pattern[i + 1] == "*":
-                # `**/` matches zero or more segments (with trailing slash)
                 if i + 2 < len(pattern) and pattern[i + 2] == "/":
                     regex_parts.append(r"(?:.*/)?")
                     i += 3
                     continue
-                # `**` at end or without slash matches anything
                 regex_parts.append(r".*")
                 i += 2
                 continue
@@ -48,30 +47,28 @@ def glob_match(path_str: str, pattern: str) -> bool:
     return re.fullmatch("".join(regex_parts), path_str) is not None
 
 
-def _frontmatter(content: str) -> tuple[dict[str, str | list[str]], str]:
+_LIST_KEYS = {"paths", "sources", "topics"}
+
+
+def _frontmatter(content: str) -> tuple[dict[str, object], str]:
     if not content.startswith("---\n"):
         return {}, content
     marker = content.find("\n---", 4)
     if marker < 0:
         return {}, content
-    values: dict[str, str | list[str]] = {}
+    values: dict[str, object] = {}
     for line in content[4:marker].splitlines():
+        if not line.strip() or line.startswith(" ") or line.startswith("\t"):
+            continue
         if ":" not in line:
             continue
         key, value = line.split(":", 1)
-        values[key.strip()] = value.strip()
-    paths: list[str] = []
-    in_paths = False
-    for line in content[4:marker].splitlines():
-        if line.strip() == "paths:":
-            in_paths = True
-            continue
-        if in_paths and re.match(r"\s+-\s+", line):
-            paths.append(re.sub(r"^\s+-\s+", "", line).strip())
-        elif in_paths and line and not line.startswith(" "):
-            in_paths = False
-    if paths:
-        values["paths"] = paths
+        key = key.strip()
+        value = value.strip()
+        if key in _LIST_KEYS and value and "," in value:
+            values[key] = [v.strip() for v in value.split(",") if v.strip()]
+        else:
+            values[key] = value
     return values, content[marker + 4:].strip()
 
 
@@ -83,17 +80,25 @@ class RuleMatcher:
         matches: list[RuleMatch] = []
         for path in self.root.glob("rules/**/*.md"):
             metadata, instruction = _frontmatter(path.read_text(encoding="utf-8"))
-            if metadata.get("status") != "enabled" or metadata.get("project") != project:
+            if metadata.get("status") != "enabled":
+                continue
+            if metadata.get("project") != project:
                 continue
             patterns = metadata.get("paths", [])
             if isinstance(patterns, str):
                 patterns = [patterns]
             if not patterns:
-                reason = f"project={project}"
-            if changed_path and any(glob_match(changed_path, pattern) for pattern in patterns):
-                reason = f"project={project}, path={changed_path} matches {', '.join(patterns)}"
-            else:
+                if changed_path is None:
+                    matches.append(RuleMatch(
+                        str(metadata.get("id", path.stem)), path,
+                        f"project={project}", instruction,
+                    ))
                 continue
-            rule_id = str(metadata.get("id", path.stem))
-            matches.append(RuleMatch(rule_id, path, reason, instruction))
+            if changed_path and any(glob_match(changed_path, p) for p in patterns):
+                matches.append(RuleMatch(
+                    str(metadata.get("id", path.stem)), path,
+                    f"project={project}, path={changed_path} matches "
+                    f"{', '.join(patterns)}",
+                    instruction,
+                ))
         return matches

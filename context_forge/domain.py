@@ -23,10 +23,21 @@ class ReviewStatus(StrEnum):
     SUPERSEDED = "superseded"
 
 
+class KnowledgeStatus(StrEnum):
+    PROPOSED = "proposed"
+    ACCEPTED = "accepted"
+    REVISED = "revised"
+    CONFLICTED = "conflicted"
+    ARCHIVED = "archived"
+
+
 class RuleStatus(StrEnum):
     PROPOSED = "proposed"
     ENABLED = "enabled"
+    VERIFIED = "verified"
+    STALE = "stale"
     DISABLED = "disabled"
+    ARCHIVED = "archived"
 
 
 class ClaimKind(StrEnum):
@@ -68,7 +79,37 @@ class Attempt(BaseModel):
     evidence: list[str] = Field(default_factory=list)
 
 
-class ReviewExtraction(BaseModel):
+class KnowledgeItem(BaseModel):
+    """Reusable lesson distilled from one or more reviews.
+
+    Knowledge auto-publishes to `knowledge/accepted/` — the user
+    participates by editing or archiving files, not by gating writes.
+    `user_owned=True` in the frontmatter prevents the worker from
+    overwriting a hand-written entry.
+    """
+
+    id: str = Field(min_length=1)
+    body: str = Field(min_length=1)
+    sources: list[str] = Field(default_factory=list)
+    confidence: str = "medium"
+    topics: list[str] = Field(default_factory=list)
+
+
+class RuleExtraction(BaseModel):
+    instruction: str = Field(min_length=1)
+    paths: list[str] = Field(default_factory=list)
+
+
+class SessionArtifacts(BaseModel):
+    """One model response per session end.
+
+    The worker auto-writes up to three vault files per session:
+    a `_drafts/` archival copy (when should_save=true), an
+    `accepted/` knowledge item (when should_save=true AND knowledge
+    is non-empty), and a `proposed/` rule candidate (when rule_candidate
+    is non-empty). User participation is file-based, never command-based.
+    """
+
     title: str = Field(min_length=1)
     problem: str = ""
     attempts: list[Attempt] = Field(default_factory=list)
@@ -78,6 +119,8 @@ class ReviewExtraction(BaseModel):
     candidate_topics: list[str] = Field(default_factory=list)
     should_save: bool = True
     reason: str = ""
+    knowledge: KnowledgeItem | None = None
+    rule_candidate: RuleExtraction | None = None
 
     @field_validator("claims")
     @classmethod
@@ -88,38 +131,18 @@ class ReviewExtraction(BaseModel):
         return claims
 
 
-class ReviewDraft(BaseModel):
-    id: str = Field(min_length=1)
-    session_id: str = Field(min_length=1)
-    project: str = Field(min_length=1)
-    status: ReviewStatus = ReviewStatus.DRAFT
-    extraction: ReviewExtraction
-    evidence: list[Evidence] = Field(default_factory=list)
-    source_hash: str | None = None
-    created_at: datetime = Field(default_factory=utc_now)
-    updated_at: datetime = Field(default_factory=utc_now)
-
-
-class RuleProposal(BaseModel):
-    id: str = Field(min_length=1)
-    source_knowledge_id: str = Field(min_length=1)
-    project: str = Field(min_length=1)
-    instruction: str = Field(min_length=1)
-    status: RuleStatus = RuleStatus.PROPOSED
-    paths: list[str] = Field(default_factory=list)
-
-
 class EventEnvelope(BaseModel):
     event: SessionEvent
     received_at: datetime = Field(default_factory=utc_now)
     raw: dict[str, Any] = Field(default_factory=dict)
 
 
-class RuleExtraction(BaseModel):
-    """Structured output of `LlmGateway.compile_rule`."""
+class GatewayError(Exception):
+    """Raised when a gateway refuses to produce structured output.
 
-    instruction: str = Field(min_length=1)
-    paths: list[str] = Field(default_factory=list)
+    Used for §24 case 4: fact claims without evidence must fail the job
+    rather than silently landing in accepted knowledge.
+    """
 
 
 class LlmGateway(Protocol):
@@ -132,16 +155,8 @@ class LlmGateway(Protocol):
 
     name: str
 
-    def extract_review(self, transcript_path: str | None,
-                       transcript_hash: str | None,
-                       session_id: str) -> ReviewExtraction: ...
+    def extract_session(self, transcript_path: str | None,
+                         transcript_hash: str | None,
+                         session_id: str) -> SessionArtifacts: ...
 
     def compile_rule(self, knowledge_id: str, knowledge_text: str) -> RuleExtraction: ...
-
-
-class GatewayError(Exception):
-    """Raised when a gateway refuses to produce structured output.
-
-    Used for §24 case 4: fact claims without evidence must fail the job
-    rather than silently land in accepted knowledge.
-    """
