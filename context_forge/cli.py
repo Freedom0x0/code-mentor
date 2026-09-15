@@ -63,6 +63,17 @@ def doctor() -> None:
         raise typer.Exit(code=1)
 
 
+@app.command()
+def validate() -> None:
+    """Walk the vault and report parse / path / status issues."""
+    from . import validate as v
+    issues = v.validate_vault(_vault().root)
+    output, failed = v.render(issues)
+    typer.echo(output)
+    if failed:
+        raise typer.Exit(code=1)
+
+
 @app.command("scan")
 def scan() -> None:
     """Rebuild the local full-text index and regenerate index.md."""

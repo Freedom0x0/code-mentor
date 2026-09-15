@@ -788,3 +788,50 @@ def test_rule_list_and_show_round_trip(tmp_path: Path) -> None:
     assert front["status"] == "enabled"
     assert "check tests" in body
     assert vault.read_rule("nonexistent") is None
+
+
+def test_validate_catches_unknown_status(tmp_path: Path) -> None:
+    """forge validate must flag unknown status values."""
+    from context_forge import validate
+
+    vault = Vault(tmp_path / "vault")
+    bad = vault.root / "knowledge" / "proposals" / "review_x.md"
+    bad.parent.mkdir(parents=True, exist_ok=True)
+    bad.write_text(
+        "---\ntype: knowledge\nid: x\nstatus: garbled\n---\nbody\n",
+        encoding="utf-8",
+    )
+    issues = validate.validate_vault(vault.root)
+    assert any("status: 'garbled'" in i.detail for i in issues)
+
+
+def test_validate_flags_orphaned_conflict_copy(tmp_path: Path) -> None:
+    """Conflict copies with no canonical source are warnings."""
+    from context_forge import validate
+
+    vault = Vault(tmp_path / "vault")
+    # Production uses _dt.datetime.now().strftime("%Y%m%d%H%M%S") → 14 digits
+    orphan = vault.root / "knowledge" / "proposals" / "review_x.md.conflict-20260101120000"
+    orphan.parent.mkdir(parents=True, exist_ok=True)
+    orphan.write_text("---\ntype: knowledge\nid: x\nstatus: proposed\n---\n",
+                       encoding="utf-8")
+    issues = validate.validate_vault(vault.root)
+    assert any("conflict copy with no canonical source" in i.detail
+               for i in issues)
+
+
+def test_validate_accepts_clean_vault(tmp_path: Path) -> None:
+    """A vault produced by the normal flow must validate clean."""
+    from context_forge import validate
+
+    vault = Vault(tmp_path / "vault")
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("x", encoding="utf-8")
+    store = JobStore(tmp_path / "queue.db")
+    store.enqueue_event(event(transcript))
+    process_one(store, vault, OfflineGateway())
+    review = store.list_reviews()[0]
+    vault.write_knowledge_proposal(review["id"], Path(review["path"]))
+    issues = validate.validate_vault(vault.root)
+    errors = [i for i in issues if i.severity == "error"]
+    assert errors == []
