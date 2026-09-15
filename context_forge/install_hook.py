@@ -1,8 +1,10 @@
 """Install or remove the Claude Code hook for Context Forge.
 
-Writes the SessionEnd and PreCompact entries into the user-level
-`settings.json`. Idempotent: existing entries are not duplicated, and
-running with `--uninstall` removes only the entries we own.
+Writes SessionEnd, PreCompact, and SessionStart entries into the
+user-level `settings.json`. Idempotent: existing entries are not
+duplicated, and running with `--uninstall` removes only the entries
+we own. SessionStart prints `forge status` so Claude Code can show
+the user pending review counts without manual commands.
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ from pathlib import Path
 
 HOOK_COMMAND = "python -m context_forge.hooks.claude_code"
 HOOK_EVENTS = ("SessionEnd", "PreCompact")
+SESSION_START_COMMAND = "forge status"
 HOOK_OWNER_KEY = "context_forge_managed"
 
 
@@ -42,7 +45,7 @@ def _owned_entries(hooks: list[dict]) -> list[dict]:
 
 
 def install(target: Path | None = None) -> dict[str, int]:
-    """Add the SessionEnd / PreCompact hooks to settings.json."""
+    """Add the SessionEnd / PreCompact / SessionStart hooks to settings.json."""
     path = _settings_path(target)
     payload = _load(path)
     hooks_root = payload.setdefault("hooks", {})
@@ -60,6 +63,18 @@ def install(target: Path | None = None) -> dict[str, int]:
             }],
         })
         added += 1
+    # SessionStart runs `forge status` so pending reviews are surfaced
+    # at the top of every new session without the user running a command.
+    start_bucket = hooks_root.setdefault("SessionStart", [])
+    if not any(_owned_entries([h]) for h in start_bucket if isinstance(h, dict)):
+        start_bucket.append({
+            HOOK_OWNER_KEY: True,
+            "hooks": [{
+                "type": "command",
+                "command": SESSION_START_COMMAND,
+            }],
+        })
+        added += 1
     _save(path, payload)
     return {"added": added, "path": str(path)}
 
@@ -70,7 +85,7 @@ def uninstall(target: Path | None = None) -> dict[str, int]:
     payload = _load(path)
     hooks_root = payload.get("hooks", {})
     removed = 0
-    for event in HOOK_EVENTS:
+    for event in list(hooks_root.keys()):
         bucket = hooks_root.get(event, [])
         kept = [h for h in bucket if not (isinstance(h, dict) and h.get(HOOK_OWNER_KEY))]
         removed += len(bucket) - len(kept)

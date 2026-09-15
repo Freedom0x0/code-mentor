@@ -78,6 +78,24 @@ def doctor() -> None:
 
 
 @app.command()
+def status(as_json: bool = typer.Option(False, "--json")) -> None:
+    """One-line summary of pending reviews + dead-letter jobs.
+
+    Designed to be cheap enough to run on every SessionStart. Also
+    writes the latest snapshot to `~/.context-forge/status.md` so
+    other tools (Claude Desktop, scripts) can read it.
+    """
+    from . import status as status_mod
+
+    snapshot = status_mod.collect(_store())
+    status_mod.write_status_file(status_mod.status_path(), snapshot)
+    if as_json:
+        typer.echo(status_mod.render_json(snapshot))
+    else:
+        typer.echo(status_mod.render_text(snapshot))
+
+
+@app.command()
 def validate() -> None:
     """Walk the vault and report parse / path / status issues."""
     from . import validate as v

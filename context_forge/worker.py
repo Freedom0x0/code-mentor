@@ -19,6 +19,8 @@ def process_one(store: JobStore, vault: Vault,
     session get a default `unknown` feedback so the auto-collected
     evidence exists before the user has a chance to override it.
     """
+    from . import status as status_mod
+
     job = store.claim()
     if job is None:
         return False
@@ -65,6 +67,14 @@ def process_one(store: JobStore, vault: Vault,
     except Exception as exc:
         store.finish(job["id"], error=f"{type(exc).__name__}: {exc}",
                      max_attempts=max_attempts)
+    finally:
+        try:
+            status_mod.write_status_file(
+                status_mod.status_path(),
+                status_mod.collect(store),
+            )
+        except Exception:
+            pass
     return True
 
 

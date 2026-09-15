@@ -173,16 +173,16 @@ def test_install_hook_is_idempotent_and_uninstallable(tmp_path: Path) -> None:
     from context_forge import install_hook
     target = tmp_path / "settings.json"
     first = install_hook.install(target)
-    assert first["added"] == 2
+    assert first["added"] == 3  # SessionEnd + PreCompact + SessionStart
     second = install_hook.install(target)
     assert second["added"] == 0
     payload = json.loads(target.read_text(encoding="utf-8"))
-    for event in ("SessionEnd", "PreCompact"):
+    for event in ("SessionEnd", "PreCompact", "SessionStart"):
         bucket = payload["hooks"][event]
         assert len(bucket) == 1
         assert bucket[0].get("context_forge_managed") is True
     removed = install_hook.uninstall(target)
-    assert removed["removed"] == 2
+    assert removed["removed"] == 3
     assert "hooks" not in json.loads(target.read_text(encoding="utf-8"))
 
 
@@ -290,6 +290,51 @@ def test_session_outcome_adds_explicit_feedback(tmp_path: Path) -> None:
     # RuleFeedback is an event log: auto-unknown + explicit helpful coexist.
     assert stats["feedback"]["helpful"] == 1
     assert stats["feedback"]["unknown"] == 1
+
+
+def test_status_one_liner_and_json(tmp_path: Path) -> None:
+    """`forge status` returns a one-liner; --json for machines."""
+    from context_forge import status as status_mod
+
+    vault = Vault(tmp_path / "vault")
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("x", encoding="utf-8")
+    store = JobStore(tmp_path / "queue.db")
+    store.enqueue_event(event(transcript))
+    process_one(store, vault, OfflineGateway())
+    snap = status_mod.collect(store)
+    assert "reviews_pending" in snap
+    text = status_mod.render_text(snap)
+    assert text.startswith("[context-forge]")
+    assert "session" in text
+    js = status_mod.render_json(snap)
+    import json as _json
+    parsed = _json.loads(js)
+    assert parsed["sessions"] == 1
+
+
+def test_status_file_written_after_worker(tmp_path: Path) -> None:
+    """process_one must refresh the status file so SessionStart sees latest."""
+    from context_forge import status as status_mod
+
+    vault = Vault(tmp_path / "vault")
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("hello", encoding="utf-8")
+    store = JobStore(tmp_path / "queue.db")
+    store.enqueue_event(event(transcript))
+    monkey_path = tmp_path / "fake-status.md"
+    monkey_path.parent.mkdir(parents=True, exist_ok=True)
+    monkey_path.write_text("stale\n", encoding="utf-8")
+    # Patch status_path() to point at our fake file
+    original = status_mod.status_path
+    status_mod.status_path = lambda: monkey_path  # type: ignore[assignment]
+    try:
+        process_one(store, vault, OfflineGateway())
+        body = monkey_path.read_text(encoding="utf-8")
+        assert body != "stale\n"
+        assert body.startswith("[context-forge]")
+    finally:
+        status_mod.status_path = original  # type: ignore[assignment]
 
 
 def test_doctor_reports_when_vault_missing(tmp_path: Path, monkeypatch) -> None:
