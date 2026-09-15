@@ -1,0 +1,161 @@
+from __future__ import annotations
+
+import json
+import sqlite3
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+from .domain import SessionEvent
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+class JobStore:
+    def __init__(self, path: Path):
+        self.path = path
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.db = sqlite3.connect(path)
+        self.db.row_factory = sqlite3.Row
+        self.db.execute("PRAGMA journal_mode=WAL")
+        self.db.execute("PRAGMA busy_timeout=5000")
+        self.db.executescript("""
+        CREATE TABLE IF NOT EXISTS sessions (
+          id TEXT PRIMARY KEY, project TEXT NOT NULL, cwd TEXT NOT NULL,
+          transcript_path TEXT, transcript_hash TEXT, status TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS events (
+          id TEXT PRIMARY KEY, session_id TEXT NOT NULL, kind TEXT NOT NULL,
+          payload_json TEXT NOT NULL, created_at TEXT NOT NULL,
+          UNIQUE(session_id, kind, payload_json)
+        );
+        CREATE TABLE IF NOT EXISTS jobs (
+          id TEXT PRIMARY KEY, kind TEXT NOT NULL, payload_json TEXT NOT NULL,
+          idempotency_key TEXT NOT NULL UNIQUE, status TEXT NOT NULL,
+          attempts INTEGER NOT NULL DEFAULT 0, available_at TEXT NOT NULL,
+          locked_at TEXT, lease_expires_at TEXT, last_error TEXT,
+          created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS reviews (
+          id TEXT PRIMARY KEY, session_id TEXT NOT NULL, project TEXT NOT NULL,
+          path TEXT NOT NULL UNIQUE, status TEXT NOT NULL, content_hash TEXT NOT NULL,
+          created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS rule_feedback (
+          id INTEGER PRIMARY KEY AUTOINCREMENT, rule_id TEXT NOT NULL,
+          session_id TEXT, outcome TEXT NOT NULL, note TEXT,
+          created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS rule_hit_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT, rule_id TEXT NOT NULL,
+          project TEXT NOT NULL, changed_path TEXT, session_id TEXT,
+          reason TEXT NOT NULL, occurred_at TEXT NOT NULL
+        );
+        """)
+        self.db.commit()
+
+    def enqueue_event(self, event: SessionEvent) -> bool:
+        payload = event.model_dump_json()
+        key = f"review:{event.session_id}:{event.transcript_hash or 'unknown'}"
+        now = _now()
+        try:
+            with self.db:
+                self.db.execute(
+                    "INSERT OR IGNORE INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (event.session_id, event.project, event.cwd, event.transcript_path,
+                     event.transcript_hash, "captured", now),
+                )
+                self.db.execute(
+                    "INSERT OR IGNORE INTO events VALUES (?, ?, ?, ?, ?)",
+                    (event.event_id, event.session_id, event.event_type, payload, now),
+                )
+                result = self.db.execute(
+                    "INSERT OR IGNORE INTO jobs VALUES (?, ?, ?, ?, ?, 0, ?, NULL, NULL, NULL, ?, ?)",
+                    (key, "create_review", payload, key, "queued", now, now, now),
+                )
+            return result.rowcount == 1
+        except sqlite3.Error:
+            raise
+
+    def claim(self, lease_seconds: int = 60) -> sqlite3.Row | None:
+        now = datetime.now(timezone.utc)
+        with self.db:
+            self.db.execute(
+                "UPDATE jobs SET status='queued', locked_at=NULL, lease_expires_at=NULL "
+                "WHERE status='running' AND lease_expires_at < ?", (now.isoformat(),)
+            )
+            row = self.db.execute(
+                "SELECT * FROM jobs WHERE status='queued' AND available_at <= ? "
+                "ORDER BY created_at LIMIT 1", (now.isoformat(),)
+            ).fetchone()
+            if row is None:
+                return None
+            expires = (now + timedelta(seconds=lease_seconds)).isoformat()
+            self.db.execute(
+                "UPDATE jobs SET status='running', attempts=attempts+1, locked_at=?, "
+                "lease_expires_at=?, updated_at=? WHERE id=? AND status='queued'",
+                (now.isoformat(), expires, now.isoformat(), row["id"]),
+            )
+            return self.db.execute("SELECT * FROM jobs WHERE id=?", (row["id"],)).fetchone()
+
+    def finish(self, job_id: str, error: str | None = None) -> None:
+        status = "failed" if error else "succeeded"
+        with self.db:
+            self.db.execute(
+                "UPDATE jobs SET status=?, last_error=?, updated_at=? WHERE id=?",
+                (status, error, _now(), job_id),
+            )
+
+    def list_jobs(self) -> list[sqlite3.Row]:
+        return list(self.db.execute("SELECT * FROM jobs ORDER BY created_at DESC"))
+
+    def register_review(self, review_id: str, session_id: str, project: str, path: Path, content_hash: str) -> None:
+        now = _now()
+        with self.db:
+            self.db.execute(
+                "INSERT OR IGNORE INTO reviews VALUES (?, ?, ?, ?, 'draft', ?, ?, ?)",
+                (review_id, session_id, project, str(path), content_hash, now, now),
+            )
+
+    def list_reviews(self, status: str = "draft") -> list[sqlite3.Row]:
+        return list(self.db.execute("SELECT * FROM reviews WHERE status=? ORDER BY created_at DESC", (status,)))
+
+    def set_review_status(self, review_id: str, status: str) -> None:
+        with self.db:
+            self.db.execute("UPDATE reviews SET status=?, updated_at=? WHERE id=?", (status, _now(), review_id))
+
+    def add_rule_feedback(self, rule_id: str, outcome: str, note: str | None = None,
+                          session_id: str | None = None) -> None:
+        with self.db:
+            self.db.execute(
+                "INSERT INTO rule_feedback(rule_id, session_id, outcome, note, created_at) VALUES (?, ?, ?, ?, ?)",
+                (rule_id, session_id, outcome, note, _now()),
+            )
+
+    def record_rule_hit(self, rule_id: str, project: str, reason: str,
+                         changed_path: str | None = None,
+                         session_id: str | None = None) -> None:
+        with self.db:
+            self.db.execute(
+                "INSERT INTO rule_hit_events(rule_id, project, changed_path, "
+                "session_id, reason, occurred_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (rule_id, project, changed_path, session_id, reason, _now()),
+            )
+
+    def rule_hit_stats(self, rule_id: str) -> dict[str, int | str]:
+        row = self.db.execute(
+            "SELECT COUNT(*) AS hits, MAX(occurred_at) AS last_seen "
+            "FROM rule_hit_events WHERE rule_id=?", (rule_id,)
+        ).fetchone()
+        feedback = self.db.execute(
+            "SELECT outcome, COUNT(*) AS n FROM rule_feedback "
+            "WHERE rule_id=? GROUP BY outcome", (rule_id,)
+        ).fetchall()
+        return {
+            "rule_id": rule_id,
+            "hits": row["hits"] or 0,
+            "last_seen": row["last_seen"] or "",
+            "feedback": {r["outcome"]: r["n"] for r in feedback},
+        }

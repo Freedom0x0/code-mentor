@@ -1,0 +1,126 @@
+"""Markdown vault and external-edit aware index.
+
+Markdown is the source of truth for content. The SQLite FTS5 index is
+rebuildable and only used for search. `index.md` is a generated nav file
+and must never be edited by hand.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import os
+import re
+import sqlite3
+import tempfile
+from dataclasses import dataclass
+from pathlib import Path
+
+
+@dataclass(frozen=True)
+class VaultDocument:
+    """Parsed view of a Markdown file in the vault."""
+
+    path: Path
+    frontmatter: dict[str, str]
+    body: str
+    content_hash: str
+
+
+class DocumentIndex:
+    def __init__(self, path: Path):
+        self.path = path
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.db = sqlite3.connect(path)
+        self.db.row_factory = sqlite3.Row
+        self.db.execute("PRAGMA journal_mode=WAL")
+        self.db.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS documents USING fts5("
+            "id UNINDEXED, path UNINDEXED, content)"
+        )
+        self.db.commit()
+
+    def rebuild(self, root: Path) -> int:
+        documents = self._walk(root)
+        with self.db:
+            self.db.execute("DELETE FROM documents")
+            self.db.executemany(
+                "INSERT INTO documents(id, path, content) VALUES (?, ?, ?)",
+                [
+                    (str(doc.path.relative_to(root)), str(doc.path.relative_to(root)), doc.body)
+                    for doc in documents
+                ],
+            )
+        return len(documents)
+
+    def search(self, query: str, limit: int = 20) -> list[sqlite3.Row]:
+        return list(self.db.execute(
+            "SELECT path, snippet(documents, 2, '[', ']', '...', 24) AS snippet "
+            "FROM documents WHERE documents MATCH ? LIMIT ?", (query, limit)
+        ))
+
+    @staticmethod
+    def _walk(root: Path) -> list[VaultDocument]:
+        docs: list[VaultDocument] = []
+        for path in root.rglob("*.md"):
+            if path.name == "index.md":
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            front, body = parse_frontmatter(text)
+            digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            docs.append(VaultDocument(path, front, body, digest))
+        return docs
+
+
+def parse_frontmatter(content: str) -> tuple[dict[str, str], str]:
+    """Tiny YAML frontmatter reader; avoids pulling PyYAML for an MVP.
+
+    Returns (values, body). Values cover `key: value` lines only; lists are
+    not expanded. Good enough for status / id / type / project checks; the
+    compiler will use python-frontmatter when a stricter parser is needed.
+    """
+    if not content.startswith("---\n"):
+        return {}, content
+    marker = content.find("\n---", 4)
+    if marker < 0:
+        return {}, content
+    values: dict[str, str] = {}
+    for line in content[4:marker].splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        values[key.strip()] = value.strip()
+    return values, content[marker + 4:].lstrip("\n")
+
+
+def write_index(vault_root: Path) -> Path:
+    """Generate the nav `index.md`. The file is owned by the system."""
+    target = vault_root / "index.md"
+    lines = ["---", "type: index", "generated_at: " + _today(), "---", "",
+             "# Context Forge Index", ""]
+    for section in ("reviews", "knowledge", "rules"):
+        sub = vault_root / section
+        if not sub.exists():
+            continue
+        lines.append(f"## {section}")
+        lines.append("")
+        for doc in sorted(sub.rglob("*.md")):
+            try:
+                front, _ = parse_frontmatter(doc.read_text(encoding="utf-8"))
+            except OSError:
+                continue
+            status = front.get("status", "unknown")
+            doc_id = front.get("id", doc.stem)
+            rel = doc.relative_to(vault_root)
+            lines.append(f"- [{doc_id}]({rel.as_posix()}) — {status}")
+        lines.append("")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8", newline="\n")
+    return target
+
+
+def _today() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
