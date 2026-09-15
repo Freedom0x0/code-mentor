@@ -888,3 +888,67 @@ def test_retry_job_resets_dead_letter_to_queued(tmp_path: Path) -> None:
     assert row["status"] == "queued"
     assert row["attempts"] == 0
     assert store.retry_job("nonexistent-id") is False
+
+
+def test_run_loop_processes_jobs_until_stop_after(tmp_path: Path) -> None:
+    """Daemon mode must process N jobs and exit when stop_after is reached."""
+    from context_forge.worker import run_loop
+
+    for i in range(3):
+        transcript = tmp_path / f"s{i}.jsonl"
+        transcript.write_text(f"hello {i}", encoding="utf-8")
+        store = JobStore(tmp_path / "queue.db")
+        ev = SessionEvent(
+            event_id=f"evt-{i}", event_type=EventType.SESSION_END,
+            source="test", session_id=f"sess-{i}", project="demo",
+            cwd=str(tmp_path), transcript_path=str(transcript),
+            transcript_hash=f"hash-{i}",
+        )
+        store.enqueue_event(ev)
+    vault = Vault(tmp_path / "vault")
+
+    called = []
+
+    class CountingGateway:
+        name = "counting"
+
+        def extract_review(self, transcript_path, transcript_hash, session_id):
+            called.append(session_id)
+            from context_forge.domain import ReviewExtraction
+            return ReviewExtraction(title="x", should_save=False, reason="counting")
+
+        def compile_rule(self, knowledge_id, knowledge_text):
+            return None
+
+    processed = run_loop(store, vault, CountingGateway(),
+                         interval_seconds=0.0, stop_after=3)
+    assert processed == 3
+    assert len(called) == 3
+    statuses = {j["status"] for j in store.list_jobs()}
+    assert statuses == {"succeeded"}
+
+
+def test_run_loop_handles_gateway_explosion(tmp_path: Path) -> None:
+    """A buggy gateway must not crash the loop — errors are routed to the job."""
+    from context_forge.worker import run_loop
+
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("x", encoding="utf-8")
+    store = JobStore(tmp_path / "queue.db")
+    vault = Vault(tmp_path / "vault")
+    store.enqueue_event(event(transcript))
+
+    class Exploding:
+        name = "boom"
+
+        def extract_review(self, *a, **kw):
+            raise ValueError("kaboom")
+
+        def compile_rule(self, *a, **kw):
+            return None
+
+    processed = run_loop(store, vault, Exploding(),
+                         interval_seconds=0.0, stop_after=1)
+    assert processed == 1
+    statuses = {j["status"] for j in store.list_jobs()}
+    assert statuses & {"failed", "dead_letter"}

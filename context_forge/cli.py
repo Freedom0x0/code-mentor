@@ -333,16 +333,30 @@ def rule_stats(rule_id: str) -> None:
 
 
 @worker_app.command("run")
-def worker_run(once: bool = typer.Option(False, "--once")) -> None:
-    """Process queued review jobs."""
-    if not once:
-        raise typer.BadParameter("only --once is supported in the MVP")
-    home = Path.home() / ".context-forge"
+def worker_run(once: bool = typer.Option(False, "--once"),
+               interval: float = typer.Option(0.0, "--interval", min=0.0)) -> None:
+    """Process queued review jobs.
+
+    With `--once`, process a single job and exit. Without flags the
+    command enters a daemon loop polling every `poll_interval_seconds`
+    from settings (default 2s). `--interval` overrides the poll
+    interval for ad-hoc tuning.
+    """
     settings = load_settings()
+    home = Path.home() / ".context-forge"
     provider = settings.model_provider if settings else "none"
     gateway = select_gateway(provider, settings)
-    processed = process_one(_store(), _vault(), gateway)
-    typer.echo("processed" if processed else "empty")
+    max_attempts = settings.max_attempts if settings else 3
+    if once:
+        processed = process_one(_store(), _vault(), gateway, max_attempts)
+        typer.echo("processed" if processed else "empty")
+        return
+    if interval <= 0:
+        interval = settings.poll_interval_seconds if settings else 2.0
+    from .worker import run_loop
+
+    run_loop(_store(), _vault(), gateway,
+             interval_seconds=interval, max_attempts=max_attempts)
 
 
 @app.command("install-hook")

@@ -73,4 +73,57 @@ __all__ = [
     "OfflineGateway",
     "process_one",
     "select_gateway",
+    "run_loop",
 ]
+
+
+def run_loop(store: JobStore, vault: Vault,
+             gateway: LlmGateway | None = None,
+             interval_seconds: float = 2.0,
+             max_attempts: int = 3,
+             stop_after: int | None = None) -> int:
+    """Long-running worker: claim, process, sleep, repeat.
+
+    `stop_after` lets tests terminate the loop cleanly after N successful
+    jobs (production callers leave it None and use SIGINT/SIGTERM).
+    Returns the number of jobs actually processed.
+
+    SIGTERM is converted to KeyboardInterrupt so a `taskkill` from
+    Windows Task Manager still routes through the same exit path as
+    Ctrl+C in a real terminal.
+    """
+    import signal
+    import time
+    try:
+        signal.signal(signal.SIGTERM, _sigterm_to_keyboard_interrupt)
+    except (AttributeError, ValueError):
+        # AttributeError: signal.SIGTERM doesn't exist on this platform
+        # ValueError: not the main thread (worker spawned via a thread)
+        pass
+    processed_total = 0
+    print(f"[worker] loop started; interval={interval_seconds}s "
+          f"max_attempts={max_attempts}")
+    try:
+        while True:
+            try:
+                processed = process_one(store, vault, gateway, max_attempts)
+            except Exception as exc:  # noqa: BLE001
+                # process_one already routes domain errors to the job's
+                # last_error. This catches loop-level surprises only.
+                print(f"[worker] loop error: {type(exc).__name__}: {exc}")
+                processed = False
+            if processed:
+                processed_total += 1
+                if stop_after is not None and processed_total >= stop_after:
+                    break
+            else:
+                if stop_after is not None and processed_total >= stop_after:
+                    break
+                time.sleep(interval_seconds)
+    except KeyboardInterrupt:
+        print("[worker] interrupted; exiting")
+    return processed_total
+
+
+def _sigterm_to_keyboard_interrupt(signum, frame):  # noqa: ARG001
+    raise KeyboardInterrupt
