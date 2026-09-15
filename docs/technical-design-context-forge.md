@@ -773,12 +773,17 @@ worker run --once 是首版的主要测试入口；常驻 worker 只是重复调
 - `session_end` 自动给未反馈的命中写 `unknown`；session-outcome 不替换而是叠加（事件日志）。
 - `select_gateway` 识别 `offline`/`fake`/`local`/`remote`；`local`/`remote` 是 `NoOpGateway` 占位，等用户接入具体客户端。
 - Claude Code hook 端到端回放：模拟 stdin 注入 SessionEnd，验证入队 + 重复入幂等。
+- `forge retention [--days N] [--dry-run]`：preview 列出会话；apply 真删。`JobStore.retention_preview/apply` 实现。
+- `forge knowledge accept --rule-project ... --rule-instruction ... --rule-paths ...`：在 proposal 注入 `candidate_*` 字段，accept 时自动写一条 `RuleProposal`（review→knowledge→rule 闭环）。
+- `forge import-transcript <path>`：§22 历史 transcript 显式导入。
+- `docs/mcp-transport.md`：stdio transport + Claude Desktop / Claude Code 的 `claude_desktop_config.json` 示例。
+- 26 条 pytest 全过；本轮新增 3 条覆盖 retention / 知识→规则闭环 / history import。
 
 未完成：
 
 - 真实模型 provider（local / remote）：现在有 `offline` / `fake` / `local` / `remote` 四个名字；`local` 和 `remote` 仍映射到 `NoOpGateway` 占位，等用户接入具体客户端。
 - Obsidian 文件 watcher 的 inotify/FSEvents 实时版本；目前仅基于 mtime 轮询。
-- Knowledge proposal 的 `$EDITOR` 打开与冲突副本的处理 CLI。
+- Knowledge proposal 的冲突副本处理 CLI（现在生成 `.conflict-<ts>` 副本，缺 UI 化合并命令）。
 - 规则命中的自动 feedback 采集：worker 在 `session_end` 时对未确认的命中写入 `unknown`；用户用 `forge session-outcome` 显式覆盖。
-- MCP server 已通过 5 个工具的端到端测试，缺 stdio transport 文档与 `claude_desktop_config.json` 示例。
-- `forge doctor` 的 retention 检查（`retention_days` 实际清理）。
+- MCP server 已通过 5 个工具的端到端测试；stdio transport 文档与 `claude_desktop_config.json` 示例见 `docs/mcp-transport.md`。
+- `forge doctor` 主动调用 `retention_apply`（目前 doctor 只诊断 + 用户手动跑 `forge retention`）。

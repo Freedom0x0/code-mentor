@@ -180,10 +180,46 @@ def knowledge_edit(knowledge_id: str, editor: str = typer.Option("", "--editor")
 
 
 @app.command("knowledge-accept")
-def knowledge_accept(knowledge_id: str) -> None:
-    """Accept a knowledge proposal and move it to knowledge/accepted/."""
-    path = _vault().accept_knowledge(knowledge_id)
-    typer.echo(str(path.relative_to(_vault().root)))
+def knowledge_accept(knowledge_id: str,
+                      rule_project: str = typer.Option("", "--rule-project"),
+                      rule_instruction: str = typer.Option("", "--rule-instruction"),
+                      rule_paths: str = typer.Option("", "--rule-paths")) -> None:
+    """Accept a knowledge proposal and move it to knowledge/accepted/.
+
+    If `--rule-project` and `--rule-instruction` are given, also seed a
+    matching `RuleProposal` so the user can `forge rule-enable` directly.
+    """
+    vault = _vault()
+    paths = [p.strip() for p in rule_paths.split(",") if p.strip()]
+    if rule_project or rule_instruction:
+        if not (rule_project and rule_instruction):
+            raise typer.BadParameter(
+                "rule_project and rule_instruction must be set together"
+            )
+        # Write the candidate fields into the proposal frontmatter before accept
+        proposal = vault._find_knowledge(knowledge_id, statuses=("proposed",))
+        if proposal is not None:
+            text = proposal.read_text(encoding="utf-8")
+            text = _inject_candidate_fields(
+                text, rule_project, rule_instruction, paths,
+            )
+            vault._atomic_write(proposal, text)
+    path = vault.accept_knowledge(knowledge_id)
+    typer.echo(str(path.relative_to(vault.root)))
+
+
+def _inject_candidate_fields(text: str, project: str, instruction: str,
+                              paths: list[str]) -> str:
+    """Append or replace `candidate_*` lines in a knowledge proposal frontmatter."""
+    from .index import parse_frontmatter
+    front, body = parse_frontmatter(text)
+    keys = {k: v for k, v in front.items()
+            if not k.startswith("candidate_")}
+    keys["candidate_project"] = project
+    keys["candidate_instruction"] = instruction
+    keys["candidate_paths"] = ",".join(paths)
+    lines = "\n".join(f"{k}: {v}" for k, v in keys.items())
+    return f"---\n{lines}\n---\n\n{body.lstrip()}"
 
 
 @app.command("rule-propose")
@@ -295,6 +331,52 @@ def session_outcome(session_id: str, outcome: str,
     for rule_id in hits:
         store.add_rule_feedback(rule_id, outcome, note or None, session_id=session_id)
     typer.echo(f"recorded {outcome} for {len(hits)} rule hit(s)")
+
+
+@app.command("retention")
+def retention(days: int = typer.Option(30, "--days", min=0),
+               dry_run: bool = typer.Option(False, "--dry-run")) -> None:
+    """List or delete sessions older than `--days` (default 30)."""
+    targets = _store().retention_apply(days, dry_run=dry_run)
+    verb = "would delete" if dry_run else "deleted"
+    typer.echo(f"{verb} {len(targets)} session(s)")
+    for sid in targets:
+        typer.echo(f"  {sid}")
+
+
+@app.command("import-transcript")
+def import_transcript(path: Path,
+                       project: str = typer.Option("", "--project"),
+                       session_id: str | None = typer.Option(None, "--session")) -> None:
+    """Backfill an old transcript into the queue without a live hook.
+
+    Computes a transcript hash, constructs a SessionEvent and enqueues a
+    job. Use this to migrate history captured before Context Forge was
+    installed (§22).
+    """
+    import hashlib
+
+    if not path.exists():
+        raise typer.BadParameter(f"transcript not found: {path}")
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    from .domain import EventType, SessionEvent
+    from .config import load_settings
+    cwd = str(path.parent)
+    settings = load_settings()
+    proj = project or (settings.root.name if settings else path.parent.name)
+    sid = session_id or f"import-{digest[:12]}"
+    event = SessionEvent(
+        event_id=f"evt-import-{digest[:12]}",
+        event_type=EventType.SESSION_END,
+        source="import",
+        session_id=sid,
+        project=proj,
+        cwd=cwd,
+        transcript_path=str(path),
+        transcript_hash=digest,
+    )
+    queued = _store().enqueue_event(event)
+    typer.echo("queued" if queued else "duplicate")
 
 
 if __name__ == "__main__":

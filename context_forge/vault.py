@@ -47,21 +47,42 @@ class Vault:
         return results
 
     def accept_knowledge(self, knowledge_id: str) -> Path:
-        """Move a proposal to `knowledge/accepted/` and flip status."""
+        """Move a proposal to `knowledge/accepted/` and flip status.
+
+        If the proposal carries a `candidate_instruction` field, also
+        seed a matching `RuleProposal` so the user can enable a rule
+        directly from accepted knowledge (§11 second-slice precursor).
+        """
         source = self._find_knowledge(knowledge_id, statuses=("proposed", "accepted"))
         if source is None:
             raise FileNotFoundError(f"knowledge proposal not found: {knowledge_id}")
         text = source.read_text(encoding="utf-8")
+        front, _ = parse_frontmatter(text)
         accepted = re.sub(r"(?m)^status:\s*[^\n]+$", "status: accepted", text, count=1)
         if "status:" not in accepted:
             raise ValueError(f"knowledge file has no status field: {source}")
         target = self._safe(f"knowledge/accepted/{knowledge_id}.md")
         target.parent.mkdir(parents=True, exist_ok=True)
         if source == target:
-            return source
-        result = self._atomic_write(target, accepted)
-        if source != target and source.exists():
+            result = source
+        else:
+            result = self._atomic_write(target, accepted)
             source.unlink()
+        instruction = front.get("candidate_instruction", "").strip()
+        project = front.get("candidate_project", front.get("project", "")).strip()
+        paths_raw = front.get("candidate_paths", "")
+        paths = [p.strip() for p in paths_raw.split(",") if p.strip()]
+        if instruction and project:
+            try:
+                self.write_rule_proposal(
+                    knowledge_id=knowledge_id,
+                    project=project,
+                    instruction=instruction,
+                    paths=paths,
+                )
+            except FileExistsError:
+                # an existing proposal is fine — the user already has a draft
+                pass
         return result
 
     def _find_knowledge(self, knowledge_id: str,

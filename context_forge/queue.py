@@ -222,3 +222,27 @@ class JobStore:
             )
             counts["jobs"] = cur.rowcount
         return counts
+
+    def retention_preview(self, days: int) -> list[dict[str, str]]:
+        """List sessions older than `days` that retention would delete.
+
+        Each row has `session_id` and `created_at`. Markdown files in
+        the vault are not represented here; callers must delete those
+        separately or rely on the user to keep them.
+        """
+        from datetime import datetime, timedelta, timezone
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        rows = self.db.execute(
+            "SELECT id, created_at FROM sessions WHERE created_at < ? "
+            "ORDER BY created_at", (cutoff,),
+        ).fetchall()
+        return [{"session_id": r["id"], "created_at": r["created_at"]} for r in rows]
+
+    def retention_apply(self, days: int, dry_run: bool = False) -> list[str]:
+        """Delete sessions older than `days`. Returns the list of removed IDs."""
+        targets = [r["session_id"] for r in self.retention_preview(days)]
+        if dry_run:
+            return targets
+        for session_id in targets:
+            self.delete_session(session_id)
+        return targets

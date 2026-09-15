@@ -396,3 +396,91 @@ def test_claude_code_hook_ingests_event(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
     claude_code.main()
     assert len(store.list_jobs()) == 1
+
+
+def test_retention_preview_and_apply(tmp_path: Path) -> None:
+    """Sessions older than retention days must be removable on demand."""
+    from datetime import datetime, timedelta, timezone
+
+    store = JobStore(tmp_path / "queue.db")
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("x", encoding="utf-8")
+    store.enqueue_event(event(transcript))
+    # Backdate the session row so it crosses the retention cutoff
+    old = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
+    store.db.execute("UPDATE sessions SET created_at=? WHERE id=?",
+                     (old, "sess-1"))
+    preview = store.retention_preview(days=30)
+    assert {r["session_id"] for r in preview} == {"sess-1"}
+    targets = store.retention_apply(days=30, dry_run=True)
+    assert targets == ["sess-1"]
+    # dry_run must not actually delete
+    assert store.db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 1
+    removed = store.retention_apply(days=30)
+    assert removed == ["sess-1"]
+    assert store.db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 0
+
+
+def test_knowledge_accept_seeds_rule_proposal(tmp_path: Path) -> None:
+    """Accepting knowledge with candidate_* fields writes a matching RuleProposal."""
+    from context_forge.cli import _inject_candidate_fields
+
+    vault = Vault(tmp_path / "vault")
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("x", encoding="utf-8")
+    store = JobStore(tmp_path / "queue.db")
+    store.enqueue_event(event(transcript))
+    process_one(store, vault, OfflineGateway())
+    review = store.list_reviews()[0]
+    vault.write_knowledge_proposal(review["id"], Path(review["path"]))
+    # Annotate the proposal with candidate rule fields
+    proposal = vault._find_knowledge(review["id"], statuses=("proposed",))
+    text = _inject_candidate_fields(
+        proposal.read_text(encoding="utf-8"),
+        project="demo",
+        instruction="check tests first",
+        paths=["src/**/*.py", "tests/**/*.py"],
+    )
+    vault._atomic_write(proposal, text)
+    vault.accept_knowledge(review["id"])
+    rule = vault.root / "rules" / "proposals" / f"rule-{review['id']}.md"
+    assert rule.exists()
+    body = rule.read_text(encoding="utf-8")
+    assert "check tests first" in body
+    assert "src/**/*.py" in body
+
+
+def test_import_transcript_enqueues_event(tmp_path: Path) -> None:
+    """Section 22: history transcripts need an explicit import command."""
+    import hashlib
+
+    transcript = tmp_path / "old.jsonl"
+    transcript.write_text("legacy transcript content", encoding="utf-8")
+    store = JobStore(tmp_path / "queue.db")
+    expected_hash = hashlib.sha256(transcript.read_bytes()).hexdigest()
+    from context_forge.cli import _store, _vault
+    orig_store = _store
+    orig_vault = _vault
+    import context_forge.cli as cli
+    cli._store = lambda: store
+    cli._vault = lambda: Vault(tmp_path / "vault")
+    try:
+        from typer.testing import CliRunner
+        runner = CliRunner()
+        result = runner.invoke(
+            cli.app,
+            ["import-transcript", str(transcript),
+             "--project", "legacy", "--session", "sess-import"],
+        )
+        assert result.exit_code == 0, result.output
+        assert "queued" in result.output
+        jobs = store.list_jobs()
+        assert len(jobs) == 1
+        import json
+        payload = json.loads(jobs[0]["payload_json"])
+        assert payload["session_id"] == "sess-import"
+        assert payload["transcript_hash"] == expected_hash
+        assert payload["source"] == "import"
+    finally:
+        cli._store = orig_store
+        cli._vault = orig_vault
