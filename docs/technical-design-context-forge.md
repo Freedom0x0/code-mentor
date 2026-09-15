@@ -790,6 +790,9 @@ worker run --once 是首版的主要测试入口；常驻 worker 只是重复调
 - 37 条 pytest 全过；新增 3 条覆盖 review-diff / metrics / rebuild_history。
 - Observability 命令：`forge rule-list [--status]` / `forge rule-show <id>` / `forge session-info <id>`，输出 JSON；`vault.list_rules` / `vault.read_rule` / `JobStore.session_info` 支撑。
 - 40 条 pytest 全过；新增 3 条覆盖 session-info / rule-list / rule-show。
+- 方案 §16 队列契约：`finish(error=..., max_attempts)` 在 attempts 到 max 时落 dead_letter；`retry_job` 把 failed/dead_letter → queued；`forge jobs --status dead_letter` 列死信；`forge jobs-retry <id>` 救回；metrics 加 `jobs_dead_letter` 计数。
+- 方案 §22 worker 进程：`worker.run_loop(store, vault, gateway, interval_seconds, max_attempts, stop_after)` 持久轮询；SIGTERM 转 KeyboardInterrupt 走同一条 exit path；`forge worker run`（无 --once）走 daemon 模式，`--interval` 覆盖 `poll_interval_seconds`。
+- 47 条 pytest 全过；新增 2 条 daemon 循环测试（stop_after 退出 + gateway 异常不死循环）。
 
 未完成：
 
