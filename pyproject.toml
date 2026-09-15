@@ -18,3 +18,7 @@ forge-mcp = "context_forge.mcp_server:main"
 
 [dependency-groups]
 dev = ["pytest>=8.0,<9.0"]
+
+[tool.setuptools.packages.find]
+include = ["context_forge*"]
+exclude = ["evals*", "assets*", "tests*", "docs*"]

@@ -35,3 +35,6 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
+
+# Local test fixtures
+test_*.md
