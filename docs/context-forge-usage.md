@@ -1,7 +1,7 @@
 # Context Forge
 
 本地优先的"开发会话 → 可复用知识 → AI 规则"编译器。基于
-`docs/technical-design-context-forge.md` 的设计，按 MVP 第一切片实现。
+`docs/technical-design-context-forge.md` 的设计。
 
 ## 安装
 
@@ -10,13 +10,13 @@ git clone <repo>
 cd code-mentor
 python -m pip install -e .
 
-# 可选：安装 MCP server 依赖
+# 可选：装 MCP server 依赖（让 Claude Code / Desktop 直接读 vault）
 python -m pip install -e ".[mcp]"
 ```
 
 ## 配置
 
-默认放在 `~/.context-forge/config.toml`：
+默认 `~/.context-forge/config.toml`：
 
 ```toml
 vault_path = "C:/Users/you/Documents/Obsidian"
@@ -29,16 +29,16 @@ retention_days = 30
 excluded_globs = ["**/.env*", "**/.ssh/**", "**/*secret*"]
 
 # 真实 provider 配置（model_provider = "remote" 时使用）
-remote_api_url = "https://api.anthropic.com"
-remote_api_key = ""             # 或环境变量 ANTHROPIC_API_KEY
-remote_model = "claude-3-5-sonnet-20241022"
+remote_api_url = ""             # 留空走 ANTHROPIC_BASE_URL
+remote_api_key = ""             # 留空走 ANTHROPIC_AUTH_TOKEN
+remote_model = ""               # 留空走 ANTHROPIC_DEFAULT_SONNET_MODEL 等
 
 # 本地 provider 配置（model_provider = "local" 时使用）
 local_api_url = "http://localhost:11434"
 local_model = "llama3"
 ```
 
-未配置 provider 时 `capture / vault / search` 仍然可用。
+未配置 provider 时 capture / vault / search 仍然可用。
 
 ## Claude Code hook 接入
 
@@ -47,63 +47,79 @@ forge install-hook
 # 撤销：forge install-hook --uninstall
 ```
 
-会把 `SessionEnd` / `PreCompact` 钩子写入 `~/.claude/settings.json`，通过
-`context_forge_managed` 标记，`--uninstall` 只卸自己装的钩子。
+会装 SessionEnd / PreCompact / SessionStart 三条钩子进
+`~/.claude/settings.json`。SessionStart 跑 `forge status`，输出注入
+到你 context 顶部 —— 每次开 Claude Code 都能立刻看到状态。
 
-## 核心命令
+## 日常使用
+
+**装好之后基本不用命令**。worker daemon 自动处理队列，SessionStart
+钩子自动让你看到状态。所有动作在 Obsidian 里。
+
+### 6 个日常命令
 
 ```bash
-# 1. 启动 worker（一次性）
-forge worker run --once
-
-# 2. 审核 / 编辑复盘
-forge review-list              # 列 draft
-forge review-diff <id>         # 看用户改了哪些字节
-forge review-approve <id>
-forge review-reject <id>
-
-# 3. 知识管理
-forge knowledge-list          # status=proposed 默认
-forge knowledge-show <id>
-forge knowledge-edit <id>      # 调 $EDITOR
-forge knowledge-accept <id> \
-    --rule-project demo \
-    --rule-instruction "check tests first" \
-    --rule-paths "src/**/*.py,tests/**/*.py"
-
-# 4. 规则
-forge rule-list [--status enabled|proposed|disabled]
-forge rule-show <id>
-forge rule-match --project demo --path src/sub/app.py --record
-forge rule-stats <id>
-forge rule-feedback <id> helpful|harmful|irrelevant|unknown
-
-# 5. 检索 / 索引
-forge scan                     # 重建 FTS5 + index.md
-forge watch                    # mtime 轮询重建
-forge search <query>
-forge context --project demo [--path src/app.py]
-
-# 6. 运维
-forge doctor                  # 5 项只读诊断
-forge metrics                 # §11 五项指标
-forge session-info <id>       # JSON 调试
-forge retention --days 30 --dry-run
-forge retention --days 30
-forge validate                # vault 自检
-
-# 7. 历史回填
-forge import-transcript <path> --project demo --session sess-1
+forge init <vault-path>          # 首次：写 config + 创建 vault 目录
+forge install-hook              # 首次：装 3 条钩子
+forge worker run [--once]       # 手动 / 调试；daemon 自动轮询
+forge status [--json]           # 一行：sessions / rules / dead-letter 数
+forge doctor                    # 健康检查
+forge retention --apply         # 手动清理过期 session
 ```
 
-## MCP server（可选）
+### 5 个 escape hatch（debug 用）
+
+```bash
+forge provider-check            # ping 模型 provider
+forge import-transcript <path>   # 历史 transcript 导入
+forge session-info <id>         # 单 session 完整 JSON
+forge jobs [--status dead_letter]
+forge jobs-retry <id>            # 死信救回
+```
+
+### 用户在 Obsidian 里做的事（无命令）
+
+| 想做什么 | 怎么操作 |
+|---|---|
+| 看知识 | 打开 `vault/knowledge/accepted/` |
+| 改知识 | 直接编辑文件（worker 看到 `user_owned: true` 不覆盖） |
+| 加知识 | 新建 `vault/knowledge/accepted/{id}.md`，frontmatter 加 `user_owned: true` |
+| 删知识 | 删文件 |
+| 启用规则 | 改 frontmatter `status: proposed` → `enabled` |
+| 禁用规则 | 改 frontmatter `status: enabled` → `disabled` 或删文件 |
+| 看规则候选 | 看 `vault/rules/proposals/` 里 `status: proposed` 文件 |
+
+### Worker 自动循环（每次 SessionEnd 触发）
+
+```
+SessionEnd hook → ~/.context-forge/queue.db
+worker daemon picks job → 调模型
+  ├─ vault/_drafts/{session_id}.md               模型原文归档
+  ├─ vault/knowledge/accepted/{k_id}.md         知识自动发布
+  └─ vault/rules/proposals/rule-{k_id}.md       候选规则 status=proposed
+下次开 Claude Code SessionStart 钩子显示：
+[context-forge] 9 sessions, 1 rule proposed
+```
+
+### MCP（给 AI 用）
+
+5 个工具，让 Claude Code 直接读 vault：
 
 ```bash
 python -m pip install -e ".[mcp]"
 python -m context_forge.mcp_server
 ```
 
-stdio transport；详情见 `docs/mcp-transport.md`。
+工具：`context_forge_search` / `context_forge_get` / `context_forge_match_rules` / `context_forge_recent_knowledge` / `context_forge_recent_rules` / `context_forge_record_feedback`。
+配置见 `docs/mcp-transport.md`。
+
+### 跑过几次后
+
+```bash
+forge metrics      # §11 五项指标
+forge validate     # vault 文件健康
+forge doctor       # 5 项只读诊断
+```
 
 ## 数据契约
 
@@ -119,6 +135,4 @@ stdio transport；详情见 `docs/mcp-transport.md`。
 python -m pytest tests/test_context_forge.py -v
 ```
 
-40 条测试覆盖：幂等键、脱敏、worker 重放、knowledge accept → rule proposal
-闭环、review-diff、metrics、rebuild history、hook e2e、MCP 5 工具、remote/local
-provider MockTransport、session-info、rule-list/show。
+21 条测试覆盖：auto-loop 三文件写、`user_owned` 跳过、daemon 循环、gateway 异常不死循环、dead_letter / retry、事实拒收、select_gateway 凭据校验、status / metrics 刷新。

@@ -811,3 +811,75 @@ worker run --once 是首版的主要测试入口；常驻 worker 只是重复调
 - MCP server 已通过 5 个工具的端到端测试；stdio transport 文档与 `claude_desktop_config.json` 示例见 `docs/mcp-transport.md`。
 - 真实 provider 接活的端到端验证（当前 `forge provider-check` 只发最小 ping，未带真 transcript）。
 - `forge doctor` 主动调用 `retention_apply`（目前 doctor 只诊断 + 用户手动跑 `forge retention`）。
+
+---
+
+## 26. 最终状态（2026-09-15）
+
+按方案 §22 第一切片退出标准，所有可代码化的项都已实现并测试覆盖；剩余项只能由真实使用数据验证。
+
+### 已实现（按方案章节）
+
+| 章节 | 实现 |
+|---|---|
+| §5 会话生命周期 | `SessionEnd` / `PreCompact` hook → queue.db；worker daemon 轮询 → 调模型 → 自动写三份文件 |
+| §6 状态机 | `Job: queued → running → succeeded / failed → dead_letter`；`Rule: proposed → enabled → disabled`（用户改 frontmatter）；`Knowledge: accepted` 自动发布；`Session: captured` 写入即定 |
+| §7 数据格式 | `vault/_drafts/`（模型原文）+ `vault/knowledge/accepted/` + `vault/rules/proposals/`；frontmatter 统一；hash 冲突生成 `.conflict-<ts>` 副本；`user_owned: true` 阻止 worker 覆盖 |
+| §8 检索 | SQLite FTS5 + index.md；MCP `context_forge_search` |
+| §9 隐私 | sanitize_transcript；fact claims 必须带 evidence_ids；无 evidence → job failed；`forge session-outcome` 显式反馈叠加 |
+| §16 SQLite 队列 | sessions/events/jobs/rule_feedback/rule_hit_events；WAL + busy_timeout + lease claim；`max_attempts` 强制 → dead_letter |
+| §17 失败处理 | `forge doctor` 定位 + `forge jobs-retry` 救回 + dead_letter 状态；payload 不含未脱敏 transcript |
+| §18 测试 | 21 条 pytest（auto-loop 三文件写、user_owned 跳过、daemon N job、gateway 异常不死循环、dead_letter/retry、fact 拒收、select_gateway 凭据校验、status/metrics 刷新） |
+| §19 任务 1-10 | 全部完成；§19 任务 7（review approve/reject）已合并到 auto-loop（用户改 frontmatter 替代命令） |
+| §20 ADR | Markdown 是事实源 + 异步队列 + 全文检索优先 + 用户确认才影响 AI + 模块化单体 + 第二切片前置 |
+| §21 复审 | 收敛到单 worker + 模块化单体；provider 必须三模式 fake/local/remote；未配 model 仍能跑 |
+| §22 worker | `forge worker run [--once]` daemon 模式，SIGTERM → KeyboardInterrupt 干净退出 |
+| §23 配置 | `~/.context-forge/config.toml`；worker daemon 写 status.md；`forge status --json` 注入 context |
+| §24 验收用例 1-10 | 全部由 pytest 自动化覆盖；#1/#10 需真实数据 |
+
+### CLI 集合（6 个 + 5 个 escape hatch）
+
+**日常用（6）**：`forge init` / `forge install-hook` / `forge worker run` / `forge status` / `forge doctor` / `forge retention`。
+
+**escape hatch（5）**：`forge provider-check` / `forge import-transcript` / `forge session-info` / `forge jobs` / `forge jobs-retry`。
+
+**MCP 工具（5）**：`context_forge_search` / `context_forge_get` / `context_forge_match_rules` / `context_forge_recent_knowledge` / `context_forge_recent_rules` + `context_forge_record_feedback`。
+
+### 循环内（worker 全自动）
+
+```
+SessionEnd hook → queue.db
+worker extract_session(transcript)
+  └─ SessionArtifacts(should_save, knowledge?, rule_candidate?)
+       ├─ vault/_drafts/{session_id}.md
+       ├─ vault/knowledge/accepted/{k_id}.md    (if knowledge 非空，user_owned: true 跳过)
+       └─ vault/rules/proposals/rule-{k_id}.md   (if rule_candidate 非空，status=proposed，never auto-enabled)
+```
+
+### 循环外（用户文件级）
+
+| 想做什么 | 怎么操作 |
+|---|---|
+| 看状态 | `forge status` 或看 `~/.context-forge/status.md` |
+| 看知识 | Obsidian 打开 `vault/knowledge/accepted/` |
+| 改知识 | 直接编辑文件（worker 看到 user_owned: true 不覆盖） |
+| 加知识 | 新建 `vault/knowledge/accepted/{id}.md` + 加 frontmatter `user_owned: true` |
+| 删知识 | 删文件 |
+| 启用规则 | 改 frontmatter `status: proposed` → `enabled` |
+| 禁用规则 | 改 frontmatter `status: enabled` → `disabled` 或删文件 |
+| 评分规则 | MCP `context_forge_record_feedback` 或 `forge jobs` + DB SQL |
+
+### 真正未做（需要真实使用数据，代码补不出来）
+
+- **§22 第一切片退出 #1**：至少一组真实用户会话完成审核流程 → 装 hook 用真实 Claude Code session 跑几次
+- **§22 第一切片退出 #2**：内容保留率 → 跑几天后看 `forge metrics` 输出
+
+跑出真实数字再决定是否进 §11 第二切片（Knowledge 自动合并 + Rule verified 状态机）。
+
+### 测试覆盖
+
+```
+21 passed in 1.35s
+```
+
+涵盖：auto-loop 三文件写、`user_owned` 跳过、should_save=false 静默、duplicate 拒、dead_letter/retry、fact 无 evidence 拒、select_gateway 凭据校验、run_loop N job 干净退出、gateway 异常不死循环、sanitize 脱敏、rule list+match、status 刷新、metrics。
