@@ -277,12 +277,14 @@ def test_select_gateway_offline_and_none() -> None:
     assert isinstance(select_gateway("bogus"), NoOpGateway)
 
 
-def test_select_gateway_remote_without_key_raises(monkeypatch) -> None:
+def test_select_gateway_remote_without_key_raises(monkeypatch, tmp_path) -> None:
     import pytest
     from context_forge.provider_http import GatewayError
 
     for var in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"):
         monkeypatch.delenv(var, raising=False)
+    # Point home to tmp_path so _settings_env doesn't find the real config
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
 
     class FakeSettings:
         model_provider = "remote"
