@@ -198,7 +198,23 @@ class Vault:
         from .index import DocumentIndex, write_index
         DocumentIndex(self._index_path()).rebuild(self.root)
         write_index(self.root)
+        self._scan_rule_feedback()
         return {"files": self._count_markdown(), "index": 1}
+
+    def _scan_rule_feedback(self) -> None:
+        """Read `feedback:` from rule frontmatter and emit to the feedback table."""
+        from .queue import JobStore
+        store = JobStore(self._index_path().parent / "queue.db")
+        for path in self.root.glob("rules/**/*.md"):
+            text = path.read_text(encoding="utf-8")
+            front, _ = parse_frontmatter(text)
+            fb = str(front.get("feedback", "")).strip().lower()
+            if fb not in ("helpful", "harmful", "irrelevant"):
+                continue
+            rule_id = str(front.get("id", path.stem))
+            store.add_rule_feedback(rule_id, fb, note="from frontmatter scan")
+            text = text.replace(f"feedback: {fb}", "feedback: ", 1)
+            path.write_text(text, encoding="utf-8", newline="\n")
 
     def _count_markdown(self) -> int:
         return sum(1 for _ in self.root.rglob("*.md") if _.name != "index.md")

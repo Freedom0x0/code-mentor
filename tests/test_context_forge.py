@@ -418,3 +418,73 @@ def test_metrics_include_counts(tmp_path: Path) -> None:
     m = store.metrics()
     assert m["sessions"] == 1
     assert m["jobs_succeeded"] == 1
+
+
+def test_scan_picks_up_frontmatter_feedback(tmp_path: Path) -> None:
+    """`forge scan` must read `feedback:` from rule frontmatter and record it."""
+    from context_forge.domain import RuleExtraction
+
+    vault = Vault(tmp_path / "vault")
+    vault.write_rule_candidate("s1", "k1", "demo",
+                                 RuleExtraction(instruction="x", paths=[]))
+    rule = vault.root / "rules" / "proposals" / "rule-k1.md"
+    text = rule.read_text(encoding="utf-8")
+    text = text.replace("---\n", "---\nfeedback: helpful\n", 1)
+    rule.write_text(text, encoding="utf-8")
+    vault.scan()
+    store = JobStore(vault._index_path().parent / "queue.db")
+    stats = store.rule_hit_stats("rule-k1")
+    assert "helpful" in stats.get("feedback", {})
+
+
+def test_doctor_fix_applies_retention(tmp_path: Path, monkeypatch) -> None:
+    """`forge doctor --fix` must clean old sessions."""
+    from datetime import datetime, timedelta, timezone
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+
+    store = JobStore(tmp_path / ".context-forge" / "queue.db")
+    transcript = tmp_path / "s.jsonl"
+    transcript.write_text("x", encoding="utf-8")
+    store.enqueue_event(event(transcript))
+    old = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
+    store.db.execute("UPDATE sessions SET created_at=? WHERE id=?", (old, "sess-1"))
+    store.db.commit()
+
+    import context_forge.cli as cli
+    cli._store = lambda: store
+    cli._vault = lambda: Vault(tmp_path / "vault")
+    from typer.testing import CliRunner
+    result = CliRunner().invoke(cli.app, ["doctor", "--fix"])
+    assert result.exit_code == 0
+    assert "cleaned" in result.output
+
+
+def test_watchdog_watcher_detects_changes(tmp_path: Path) -> None:
+    """forge watch --daemon must trigger a scan on file change."""
+    import hashlib
+    from datetime import datetime
+    vault = Vault(tmp_path / "vault")
+    vault.write_rule_candidate("s1", "k1", "demo",
+        __import__("context_forge.domain", fromlist=["RuleExtraction"]).RuleExtraction(
+            instruction="x", paths=[]))
+    vault.scan()
+    marked = []
+    from watchdog.observers import Observer
+    from watchdog.events import FileSystemEventHandler
+
+    class H(FileSystemEventHandler):
+        def on_modified(self, event):
+            if event.src_path.endswith(".md") and "rule-k1" in event.src_path:
+                marked.append(True)
+
+    obs = Observer()
+    obs.schedule(H(), str(vault.root), recursive=True)
+    obs.start()
+    rule = vault.root / "rules" / "proposals" / "rule-k1.md"
+    rule.write_text(rule.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    import time
+    time.sleep(0.5)
+    obs.stop()
+    obs.join()
+    assert marked

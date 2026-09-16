@@ -124,13 +124,27 @@ def status(as_json: bool = typer.Option(False, "--json")) -> None:
 
 
 @app.command()
-def doctor() -> None:
-    """Run read-only diagnostics for vault, queue, index and provider."""
+def doctor(fix: bool = typer.Option(False, "--fix")) -> None:
+    """Run read-only diagnostics for vault, queue, index and provider.
+
+    With `--fix`, also apply retention for sessions older than
+    `retention_days` from config (default 30).
+    """
     from . import doctor as diag
 
     rows = diag.run_all()
     output, failed = diag.render(rows)
     typer.echo(output)
+    if fix:
+        settings = load_settings()
+        days = settings.retention_days if settings else 30
+        store = _store()
+        targets = store.retention_preview(days)
+        if not targets:
+            typer.echo(f"no sessions older than {days}d to clean")
+        else:
+            store.retention_apply(days)
+            typer.echo(f"cleaned {len(targets)} session(s) older than {days}d")
     if failed:
         raise typer.Exit(code=1)
 
@@ -153,6 +167,59 @@ def retention(days: int = typer.Option(30, "--days", min=0),
     typer.echo(f"{verb} {len(targets)} session(s)")
     for sid in targets:
         typer.echo(f"  {sid}")
+
+
+@app.command("scan")
+def scan_cmd() -> None:
+    """Rebuild the FTS index and scan for rule frontmatter feedback."""
+    result = _vault().scan()
+    typer.echo(f"indexed {result['files']} documents; index.md generated")
+
+
+@app.command("watch")
+def watch_cmd(daemon: bool = typer.Option(False, "--daemon"),
+               interval: float = typer.Option(2.0, "--interval", min=0.5)) -> None:
+    """Watch the vault for file changes and auto-rebuild the index.
+
+    `--daemon` uses OS-native file notifications (watchdog). Falls
+    back to mtime polling without it.
+    """
+    import time
+    vault = _vault()
+    last_mtime = 0.0
+
+    if daemon:
+        try:
+            from watchdog.observers import Observer
+            from watchdog.events import FileSystemEventHandler
+        except ImportError:
+            typer.echo("watchdog not installed; try `pip install watchdog`")
+            raise typer.Exit(code=1)
+
+        class Handler(FileSystemEventHandler):
+            def on_modified(self, event):
+                if event.src_path.endswith(".md"):
+                    vault.scan()
+                    typer.echo(f"re-indexed ({event.src_path})")
+
+        observer = Observer()
+        observer.schedule(Handler(), str(vault.root), recursive=True)
+        observer.start()
+        try:
+            while True:
+                time.sleep(10)
+        except KeyboardInterrupt:
+            observer.stop()
+        observer.join()
+        return
+
+    while True:
+        mtime = max((p.stat().st_mtime for p in vault.root.rglob("*.md")
+                     if p.name != "index.md"), default=0.0)
+        if mtime > last_mtime:
+            vault.scan()
+            last_mtime = mtime
+        time.sleep(interval)
 
 
 # -- escape hatches ------------------------------------------------------
