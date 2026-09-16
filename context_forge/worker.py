@@ -84,15 +84,11 @@ def process_one(store: JobStore, vault: Vault,
 
 def _write_session_artifacts(vault: Vault, event: SessionEvent,
                               artifacts: SessionArtifacts) -> None:
-    """Write the archival draft + knowledge + rule candidate.
+    """Write knowledge + rule candidate.
 
     Each write is best-effort: a single failure (e.g. user-owned file)
     must not block the other writes.
     """
-    try:
-        vault.write_draft(event.session_id, artifacts)
-    except Exception as exc:
-        print(f"[worker] draft write failed for {event.session_id}: {exc}")
 
     if artifacts.knowledge is not None:
         try:

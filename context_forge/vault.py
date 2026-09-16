@@ -97,20 +97,6 @@ class Vault:
 
     # -- writes ----------------------------------------------------------
 
-    def write_draft(self, session_id: str, artifacts: SessionArtifacts) -> Path:
-        """Archival copy of model output. Lives under `_drafts/`."""
-        front = {
-            "type": "draft",
-            "id": f"draft-{session_id}",
-            "session_id": session_id,
-            "title": artifacts.title,
-            "should_save": str(artifacts.should_save).lower(),
-            "reason": artifacts.reason or "",
-        }
-        body = self._render_artifacts_body(artifacts)
-        target = self._safe(f"_drafts/{session_id}.md")
-        return self._atomic_write(target, f"---\n{self._frontmatter_lines(front)}\n---\n\n{body}")
-
     def write_knowledge_auto(self, session_id: str, knowledge: KnowledgeItem,
                               artifacts: SessionArtifacts) -> Path:
         """Auto-publish to `knowledge/accepted/`. Skipped if user-owned.
@@ -138,10 +124,11 @@ class Vault:
 
     def write_rule_candidate(self, session_id: str, knowledge_id: str,
                               project: str, rule: RuleExtraction) -> Path:
-        """Auto-write to `rules/proposals/` with status=proposed.
+        """Auto-write to `rules/proposals/` with status=enabled.
 
-        Rules never auto-enable. User must change `status` to
-        `enabled` in the frontmatter (or delete the file).
+        Rules auto-enable because the model judged the knowledge good
+        enough to publish — the gate is disabling, not enabling. Users
+        can change `status: enabled` → `disabled` or delete the file.
         """
         rule_id = f"rule-{knowledge_id}"
         target = self._safe(f"rules/proposals/{rule_id}.md")
@@ -153,7 +140,7 @@ class Vault:
             "session_id": session_id,
             "source_knowledge_id": knowledge_id,
             "project": project,
-            "status": "proposed",
+            "status": "enabled",
             "auto_generated": "true",
             "paths": ",".join(rule.paths),
         }

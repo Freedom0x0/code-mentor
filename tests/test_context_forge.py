@@ -100,10 +100,10 @@ def test_fact_without_evidence_is_rejected(tmp_path: Path) -> None:
         SessionArtifacts.model_validate(bad.model_dump())
 
 
-# -- worker writes 3 files ----------------------------------------------
+# -- worker writes knowledge + rule ------------------------------------
 
 
-def test_worker_writes_draft_knowledge_and_rule(tmp_path: Path) -> None:
+def test_worker_writes_knowledge_and_rule(tmp_path: Path) -> None:
     transcript = tmp_path / "s.jsonl"
     transcript.write_text("any content", encoding="utf-8")
     vault = Vault(tmp_path / "vault")
@@ -115,12 +115,11 @@ def test_worker_writes_draft_knowledge_and_rule(tmp_path: Path) -> None:
             return _good_artifacts()
 
     process_one(store, vault, Stub())
-    assert (vault.root / "_drafts" / "sess-1.md").exists()
     assert (vault.root / "knowledge" / "accepted" / "k-1.md").exists()
     rule = vault.root / "rules" / "proposals" / "rule-k-1.md"
     assert rule.exists()
     front, _ = parse_frontmatter(rule.read_text(encoding="utf-8"))
-    assert front["status"] == "proposed"
+    assert front["status"] == "enabled"
     assert front["auto_generated"] == "true"
 
 
@@ -140,7 +139,6 @@ def test_worker_skips_rule_when_knowledge_missing(tmp_path: Path) -> None:
             return art
 
     process_one(store, vault, Stub())
-    assert (vault.root / "_drafts" / "sess-1.md").exists()
     assert not (vault.root / "knowledge" / "accepted").exists() \
         or not list((vault.root / "knowledge" / "accepted").glob("*.md"))
     assert not (vault.root / "rules").exists() \

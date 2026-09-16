@@ -45,7 +45,7 @@ def _owned_entries(hooks: list[dict]) -> list[dict]:
 
 
 def install(target: Path | None = None) -> dict[str, int]:
-    """Add the SessionEnd / PreCompact / SessionStart hooks to settings.json."""
+    """Add hooks + register worker daemon scheduled task."""
     path = _settings_path(target)
     payload = _load(path)
     hooks_root = payload.setdefault("hooks", {})
@@ -53,34 +53,32 @@ def install(target: Path | None = None) -> dict[str, int]:
     for event in HOOK_EVENTS:
         bucket = hooks_root.setdefault(event, [])
         if any(_owned_entries([h]) for h in bucket if isinstance(h, dict)):
-            # Already installed; ensure no duplicate
             continue
-        bucket.append({
-            HOOK_OWNER_KEY: True,
-            "hooks": [{
-                "type": "command",
-                "command": HOOK_COMMAND,
-            }],
-        })
+        bucket.append({HOOK_OWNER_KEY: True,
+                       "hooks": [{"type": "command", "command": HOOK_COMMAND}]})
         added += 1
-    # SessionStart runs `forge status` so pending reviews are surfaced
-    # at the top of every new session without the user running a command.
     start_bucket = hooks_root.setdefault("SessionStart", [])
     if not any(_owned_entries([h]) for h in start_bucket if isinstance(h, dict)):
-        start_bucket.append({
-            HOOK_OWNER_KEY: True,
-            "hooks": [{
-                "type": "command",
-                "command": SESSION_START_COMMAND,
-            }],
-        })
+        start_bucket.append({HOOK_OWNER_KEY: True,
+                             "hooks": [{"type": "command",
+                                        "command": SESSION_START_COMMAND}]})
         added += 1
     _save(path, payload)
+
+    # Register the background worker as a scheduled task.
+    try:
+        from .worker_service import install as _install_worker
+        _install_worker()
+        added += 1  # count the task as an "added entry"
+    except Exception as exc:
+        # Non-fatal: the hooks work without the task.
+        print(f"[install-hook] warning: worker task not installed ({exc})")
+
     return {"added": added, "path": str(path)}
 
 
 def uninstall(target: Path | None = None) -> dict[str, int]:
-    """Remove only the Context Forge entries from settings.json."""
+    """Remove hooks + worker daemon scheduled task."""
     path = _settings_path(target)
     payload = _load(path)
     hooks_root = payload.get("hooks", {})
@@ -96,4 +94,12 @@ def uninstall(target: Path | None = None) -> dict[str, int]:
     if not hooks_root:
         payload.pop("hooks", None)
     _save(path, payload)
+
+    try:
+        from .worker_service import uninstall as _uninstall_worker
+        _uninstall_worker()
+        removed += 1
+    except Exception as exc:
+        print(f"[install-hook] warning: worker task not removed ({exc})")
+
     return {"removed": removed, "path": str(path)}
